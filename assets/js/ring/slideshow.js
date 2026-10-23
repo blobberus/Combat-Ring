@@ -1,6 +1,7 @@
 // Transition scenes: the DM presents a deck of images (or GIFs / videos) over the board, with optional slow
 // animations (zoom, pan, drift) and crossfades. Everyone renders the table's `show` object; the DM's client drives
-// the slide index (and auto-advance), and can shrink the show to a corner ("peek") to keep working on the board.
+// the slide index (and auto-advance). On the DM's screen only, the show can be full, shrunk to a corner ("peek") or
+// hidden behind a small control card, to work on other scenes while the players watch.
 import { h, clear, add, mount } from '../core/dom.js';
 import { icon } from '../core/ui.js';
 import { world } from './world.js';
@@ -41,8 +42,11 @@ export function createSlideshow(stage) {
   add(stage, el, bar);
   let sig = '';
   let current = null;
-  let peek = false;
+  let mode = 'full'; // the DM's own view of a running show: 'full' | 'peek' | 'hidden'
+  let showId = null;
   let autoTimer = 0;
+  const setMode = (m) => { mode = m; update(); };
+  el.addEventListener('click', () => { if (mode === 'peek' && world.dm && !previewing()) setMode('full'); });
 
   async function slideEl(slide, show) {
     const layer = h('div', { class: 'rg-slide' });
@@ -69,15 +73,21 @@ export function createSlideshow(stage) {
     const s = world.t('show');
     const dmControls = world.dm && !previewing();
     if (!s?.on) {
-      el.classList.remove('is-on', 'is-peek');
+      el.classList.remove('is-on', 'is-peek', 'is-tucked');
       bar.hidden = true;
       clearTimeout(autoTimer);
       if (current) { current.remove(); current = null; }
       sig = '';
+      showId = null;
       return;
     }
+    if (showId !== s.deck) { showId = s.deck; mode = 'full'; } // a new show starts full screen
+    const m = dmControls ? mode : 'full';
     el.classList.add('is-on');
-    el.classList.toggle('is-peek', peek && dmControls);
+    el.classList.toggle('is-peek', m === 'peek');
+    el.classList.toggle('is-tucked', m === 'hidden');
+    bar.classList.toggle('is-docked', m !== 'full');
+    el.title = m === 'peek' ? 'Click to show it full screen' : '';
     el.dataset.transition = s.transition || 'fade';
     el.dataset.fit = s.fit || 'cover';
     headEl.textContent = s.title || '';
@@ -98,17 +108,28 @@ export function createSlideshow(stage) {
     clearTimeout(autoTimer);
     if (dmControls) {
       const pres = world.d('dmeta')?.presenting;
-      const bsig = JSON.stringify([s.index, s.slides.length, !!pres?.auto, peek]);
+      const bsig = JSON.stringify([s.index, s.slides.length, !!pres?.auto, m, s.title]);
       if (bar.dataset.sig !== bsig) {
         bar.dataset.sig = bsig;
-        mount(bar, 
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Previous slide', 'aria-label': 'Previous slide', onclick: () => slideTo((pres?.index || 0) - 1) }, icon('chevron-left')),
-        h('span', { class: 'rg-show-count num' }, `${s.index + 1} / ${s.slides.length}`),
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Next slide', 'aria-label': 'Next slide', onclick: () => slideTo((pres?.index || 0) + 1) }, icon('chevron-right')),
-        h('button', { class: ['btn btn-sm', pres?.auto && 'is-active'], type: 'button', title: 'Advance by itself', onclick: () => { const d = world.d('dmeta'); world.dPut('dmeta', { ...d, presenting: { ...d.presenting, auto: !d.presenting.auto, at: Date.now() } }); } }, icon('clock'), pres?.auto ? 'Auto on' : 'Auto'),
-        h('button', { class: 'btn btn-sm', type: 'button', title: peek ? 'Show full screen' : 'Shrink to a corner to keep working', onclick: () => { peek = !peek; update(); } }, icon(peek ? 'external' : 'collapse'), peek ? 'Expand' : 'Peek'),
-        h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: endShow }, 'End slideshow'));
+        // full / corner / hidden: what the DM sees of it (players always see it full screen)
+        const view = h('div', { class: 'seg rg-show-mode', role: 'group', 'aria-label': 'Your view of the slideshow' },
+          ...[['full', 'external', 'Full screen'], ['peek', 'collapse', 'Corner'], ['hidden', 'eye-off', 'Hidden']].map(([v, ic, label]) => h('button', {
+            class: ['seg-btn', m === v && 'is-active'], type: 'button', 'aria-pressed': String(m === v),
+            title: v === 'full' ? 'Show it full screen' : v === 'peek' ? 'Shrink it to a corner and keep working' : 'Hide it from your screen and keep working (players still see it)',
+            onclick: () => setMode(v),
+          }, icon(ic), h('span', null, label))));
+        mount(bar,
+          m === 'full' ? null : h('div', { class: 'rg-show-what' }, icon('image'), h('span', null, 'Players see ', h('strong', null, s.title || 'the slideshow'))),
+          h('div', { class: 'rg-show-ctrls' },
+            h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Previous slide', 'aria-label': 'Previous slide', onclick: () => slideTo((pres?.index || 0) - 1) }, icon('chevron-left')),
+            h('span', { class: 'rg-show-count num' }, `${s.index + 1} / ${s.slides.length}`),
+            h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Next slide', 'aria-label': 'Next slide', onclick: () => slideTo((pres?.index || 0) + 1) }, icon('chevron-right')),
+            h('button', { class: ['btn btn-sm', pres?.auto && 'is-active'], type: 'button', 'aria-pressed': String(!!pres?.auto), title: pres?.auto ? 'Advancing by itself: click to stop' : 'Advance by itself', onclick: () => { const d = world.d('dmeta'); world.dPut('dmeta', { ...d, presenting: { ...d.presenting, auto: !d.presenting.auto, at: Date.now() } }); } }, icon('clock'), pres?.auto ? 'Auto: on' : 'Auto: off'),
+            m === 'full' ? view : null,
+            h('button', { class: 'btn btn-sm btn-primary', type: 'button', title: 'End it for everyone', onclick: endShow }, m === 'full' ? 'End slideshow' : 'End')),
+          m === 'full' ? null : view);
       }
+      if (m === 'peek') el.style.setProperty('--show-bar-h', `${bar.offsetHeight}px`); // the corner picture sits under the card
       if (pres?.auto && s.slides.length > 1) {
         const dur = Math.max(2, Number(slide.dur) || 8) * 1000;
         const left = Math.max(300, dur - (Date.now() - (pres.at || Date.now())));

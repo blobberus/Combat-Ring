@@ -1,5 +1,6 @@
-// A player's token settings (pc.<charId> on the table): token art, color and size, speed and ranges (movement,
-// weapons, spells), darkvision (radius and how it looks to this player) and a light they carry. Changes apply live.
+// A player's token settings (pc.<charId> on the table): token art, color and size, hit points and who sees its health
+// bar, speed and ranges (movement, weapons, spells), darkvision (radius and how it looks to this player) and a light
+// they carry. Changes apply live.
 import { h, clear, add } from '../../core/dom.js';
 import { openModal, field, segmented, checkbox, pickFile, toast, select, icon } from '../../core/ui.js';
 import { world, me } from '../world.js';
@@ -7,7 +8,7 @@ import { party, pcProfile } from '../characters.js';
 import { K, safeKeyPart } from '../model.js';
 import { uploadPlain, mediaUrl } from '../media.js';
 import { cropDialog } from './crop.js';
-import { lightSelect } from '../menu.js';
+import { lightSelect, sizeControl, hpBlock } from '../menu.js';
 
 const COLORS = ['#8e1b1b', '#a8321c', '#22507c', '#23675f', '#3b6b2a', '#82600f', '#8f6a14', '#6e3a5c', '#465266', '#5c4a36', '#1f1a14'];
 const PRESETS = [
@@ -41,7 +42,14 @@ export function openPcEditor(charId) {
     add(body, h('section', { class: 'cr-pc-sec' },
       field('Token ring', h('div', { class: 'rg-swatches' }, ...COLORS.map((col) => h('button', { class: ['rg-swatch', p.accent === col && 'is-active'], type: 'button', style: { background: col }, 'aria-label': col, onclick: () => { set({ color: col }); draw(); } })),
         h('input', { type: 'color', class: 'rg-color', value: p.accent || '#22507c', 'aria-label': 'Custom color', oninput: (e) => later(() => set({ color: e.target.value })) }))),
-      field('Size', segmented([{ value: 'small', label: 'Small' }, { value: 'medium', label: 'Medium' }, { value: 'large', label: 'Large' }], p.size, (v) => set({ size: v })))));
+      field('Size', sizeControl(p.size, (v) => { set({ size: v }); draw(); }),
+        `From the sheet: ${c?.size || 'medium'}. Small and Medium both fill one 5-ft square; Custom draws the token any number of squares across (0.8, 1.5…).`)));
+    // --- hit points ---
+    add(body, h('section', { class: 'cr-pc-sec' },
+      h('h3', { class: 'cr-pc-h' }, 'Hit points and health bar'),
+      ...hpBlock(() => prefs().hp, (hp) => { set({ hp: hp.max || hp.cur ? hp : null }); draw(); }),
+      field('Other players see', segmented([{ value: 'numbers', label: 'Bar and HP' }, { value: 'bar', label: 'Bar only' }, { value: 'private', label: 'Nothing' }], p.hpShow, (v) => set({ hpShow: v })),
+        'You and the DM always see your numbers. Optional: the sheet’s HP isn’t copied, so type it here or in the token menu. How bars look (place, thickness, color) is under Settings.')));
     // --- movement & ranges ---
     const ranges = raw.ranges || [{ id: 'move', label: 'Move', ft: null, on: true }];
     const rlist = h('div', { class: 'cr-ranges' });

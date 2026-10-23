@@ -291,7 +291,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
         h('img', { class: 'rg-tok-art', alt: '', draggable: 'false' }),
         h('span', { class: 'rg-tok-initials' }),
         h('span', { class: 'rg-tok-ring' }),
-        h('span', { class: 'rg-tok-hp', hidden: true }, h('i')),
+        h('span', { class: 'rg-tok-hp', hidden: true }, h('i'), h('b')),
         h('span', { class: 'rg-tok-conds', hidden: true }),
         h('span', { class: 'rg-tok-label' }),
         h('span', { class: 'rg-tok-flag', hidden: true }));
@@ -304,6 +304,12 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     const c = cellPx(v.scene);
     const seen = new Set();
     const names = getSetting('names');
+    const hpMode = getSetting('hpBars');
+    root.dataset.hpPos = getSetting('hpPos');
+    root.dataset.hpSize = getSetting('hpSize');
+    const hpColor = getSetting('hpColor');
+    root.dataset.hpColor = hpColor ? 'one' : 'health';
+    root.style.setProperty('--hp-color', hpColor || '');
     const sorted = [...v.tokens].sort((a, b) => (a.z || 0) - (b.z || 0));
     const order = { prop: [], tok: [] };
     for (const t of sorted) {
@@ -328,7 +334,11 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
       const label = el.children[5];
       label.textContent = t.label ?? t.name ?? '';
       const hp = el.children[3];
-      if (t.health) { hp.hidden = false; hp.firstChild.style.width = `${t.health.pct}%`; hp.dataset.word = t.health.word; hp.title = t.health.text || t.health.word; } else hp.hidden = true;
+      const bar = hpMode !== 'off' && t.health;
+      hp.hidden = !bar;
+      el.classList.toggle('has-hp', !!bar);
+      el.classList.toggle('hp-text', !!(bar && hpMode === 'numbers' && t.health.text));
+      if (bar) { hp.firstChild.style.width = `${t.health.pct}%`; hp.dataset.word = t.health.word; hp.lastChild.textContent = hpMode === 'numbers' ? t.health.text || '' : ''; }
       const conds = el.children[4];
       if (t.conditions?.length) { conds.hidden = false; conds.textContent = t.conditions.map((x) => x.slice(0, 2)).join(' '); conds.title = t.conditions.join(', '); } else conds.hidden = true;
       const flag = el.children[6];

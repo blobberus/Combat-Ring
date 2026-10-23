@@ -132,6 +132,9 @@ input.cr-ini-value { min-height: 32px; padding: 2px 6px; }
 .cr-slide-main { flex: 1; min-width: 0; }
 .cr-slide-main .input, .cr-slide-main .select { min-height: var(--control-h-sm); padding-top: 3px; padding-bottom: 3px; }
 .cr-slide-main .input-number { width: 64px; }
+.input.is-dm-only, .textarea.is-dm-only { border-style: dashed; border-color: var(--gold); } /* the players don't get this text */
+.cr-slide-vis { gap: 2px var(--space-3); }
+.cr-slide-vis .checkbox { font-size: var(--text-xs); }
 
 /* link lists in the interaction menu */
 .rg-link-list { display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow: auto; padding: 4px 6px; border: 1px solid var(--rule); border-radius: var(--radius-sm); }
@@ -156,6 +159,8 @@ input.cr-ini-value { min-height: 32px; padding: 2px 6px; }
 
 /* ---------- Settings ------------------------------------------------------- */
 .cr-settings section + section { padding-top: var(--space-3); border-top: 1px solid var(--rule); }
+.cr-settings-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.cr-settings-row > .field { flex: 1 1 200px; }
 .cr-keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font: 400 var(--text-sm) / 1.4 var(--font-ui); }
 .cr-keys dd { margin: 0; color: var(--ink-muted); }
 .cr-conn { list-style: none; margin: 0; padding: 0; font: 400 var(--text-sm) / 1.6 var(--font-ui); }

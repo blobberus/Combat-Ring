@@ -8,6 +8,10 @@ const DEFAULTS = {
   chars: [], // ids of the Stone-Wardens characters this device plays (tokens it may move, initiative it may enter)
   theme: null, // null = follow Stone-Wardens (light by default)
   names: 'hover', // token names: 'hover' | 'always' | 'never'
+  hpBars: 'bar', // health bars on tokens: 'bar' | 'numbers' (bar with HP where this device may see it) | 'off'
+  hpPos: 'below', // 'below' | 'above' the token
+  hpSize: 'normal', // bar thickness: 'thin' | 'normal' | 'thick'
+  hpColor: '', // '' = by health (green, amber when bloodied), else one color
   snap: true, // snap moved tokens to the grid (hold Alt to place freely)
   diagonals: 'five', // 'five' (2024: every square 5 ft) | 'alternate' (5-10-5) | 'euclid'
   panelOpen: true,

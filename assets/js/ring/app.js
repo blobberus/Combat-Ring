@@ -98,6 +98,7 @@ export function mountRing(app, { sandbox = false } = {}) {
   });
   onSetting((k) => {
     if (k === 'dmPreview') { clearSelection(); closeMenu(); drawTools(); } // no DM menu or DM tools in the player view
+    if (['names', 'hpBars', 'hpPos', 'hpSize', 'hpColor'].includes(k)) render();
     if (['names', 'dmPreview', 'snap', 'diagonals', 'playerName', 'chars'].includes(k)) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
     if (k === 'reduceMotion') app.classList.toggle('reduce-motion', !!getSetting('reduceMotion'));
     if (k === 'playerName' || k === 'chars') { world.setName(me.name()); announce(); }
@@ -269,9 +270,10 @@ export function mountRing(app, { sandbox = false } = {}) {
     const lines = [];
     let name = t.name || t.label || '';
     if (t.kind === 'pc') lines.push(t.owner ? `Played by ${t.owner}` : 'Adventurer');
+    if (t.kind === 'pc' && t.health) lines.push(t.health.text ? `HP ${t.health.text}` : t.health.word);
     if (t.kind === 'creature') {
       lines.push(t.disp === 'ally' ? 'Companion' : t.disp === 'neutral' ? 'Neutral' : 'Enemy');
-      if (t.health) lines.push(world.dm && !previewing() ? `HP ${t.health.text || t.health.word}` : t.health.word);
+      if (t.health) lines.push(t.health.text ? `HP ${t.health.text}` : t.health.word);
       if (world.dm && !previewing() && t.data?.alias && t.data.alias !== t.data.name) lines.push(`Players see “${t.data.alias}”`);
       if (t.hidden) lines.push('Hidden from players');
     }

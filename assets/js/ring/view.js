@@ -30,18 +30,22 @@ export const previewing = () => world.dm && getSetting('dmPreview');
 export function playersSee() {
   const dmeta = world.d('dmeta') || {};
   const s = dmeta.live ? dmScenes().find((x) => x.id === dmeta.live) : null;
-  if (dmeta.blackout) return { state: 'curtain', id: s?.id || null, name: s?.name || null };
-  if (s) return { state: 'scene', id: s.id, name: s.name || 'Scene' };
-  return { state: 'nothing', id: null, name: null };
+  const show = !!dmeta.presenting; // a slideshow covers the board for them until it ends
+  if (dmeta.blackout) return { state: 'curtain', id: s?.id || null, name: s?.name || null, show };
+  if (s) return { state: 'scene', id: s.id, name: s.name || 'Scene', show };
+  return { state: 'nothing', id: null, name: null, show };
 }
 
 /** The DM's "Players see …" line: a colored dot (green: a scene, amber: hidden) and the words. */
 export function playersSeeLine(ps = playersSee()) {
-  const words = ps.state === 'scene' ? ['Players see ', h('strong', null, ps.name)]
-    : ps.state === 'curtain' ? [h('strong', null, 'Hidden'), ' · players see the curtain']
-      : ['Players see ', h('strong', null, 'nothing yet')];
+  const words = ps.show ? ['Players see ', h('strong', null, 'the slideshow'), ps.state === 'scene' ? `, then ${ps.name}` : ps.state === 'curtain' ? ', then the curtain' : '']
+    : ps.state === 'scene' ? ['Players see ', h('strong', null, ps.name)]
+      : ps.state === 'curtain' ? [h('strong', null, 'Hidden'), ' · players see the curtain']
+        : ['Players see ', h('strong', null, 'nothing yet')];
   return h('span', { class: ['rg-seen', `is-${ps.state}`] }, h('span', { class: 'rg-seen-dot', 'aria-hidden': 'true' }), h('span', { class: 'rg-seen-text' }, words));
 }
+
+const hpText = (hp) => `${hp.cur}/${hp.max}${hp.temp ? ` +${hp.temp}` : ''}`;
 
 function creatureImgs(it) {
   if (it.media) return [it.media];
@@ -70,12 +74,16 @@ function pcTokens(sceneId, role) {
     if (!p) continue;
     const mine = me.owns(charId);
     const opt = ui.optimistic.get(k);
+    // its player and the DM see the numbers; the others what the player chose (hpShow)
+    const hs = healthState(p.hp);
+    const show = role === 'dm' || mine ? 'numbers' : p.hpShow;
+    const health = !hs || show === 'private' ? null : show === 'numbers' ? { ...hs, text: hpText(p.hp) } : hs;
     out.push({
       key: viewKey('table', k), kind: 'pc', charId, x: opt?.x ?? pos.x, y: opt?.y ?? pos.y, w: sizeCells(p.size), h: sizeCells(p.size),
       name: p.name, label: p.name, owner: p.owner, img: p.img, accent: p.accent, mine, missing: p.missing,
       canDrag: role === 'dm' || mine, selected: ui.selected.has(viewKey('table', k)), turn: turn === `pc-${charId}`,
       dragFrom: ui.dragFrom?.key === viewKey('table', k) ? ui.dragFrom : null,
-      conditions: p.conditions, profile: p, z: 1000,
+      conditions: p.conditions, health, profile: p, z: 1000,
     });
   }
   return out;
@@ -137,7 +145,7 @@ function waiting(title, text) {
     text ? h('p', { class: 'rg-curtain-text' }, text) : null)];
 }
 
-const curtain = () => waiting('The scene is being set', 'The DM will raise the curtain shortly.');
+const curtain = () => waiting('The scene is being set');
 
 /** Player-side tokens from public objects (the table room, or a projection in the DM's preview). */
 function publicTokens(get, list, sceneId, role) {
@@ -158,7 +166,8 @@ function publicTokens(get, list, sceneId, role) {
       selected: ui.selected.has(vk), light: it.light, data: it, id,
     };
     if (it.kind === 'creature') {
-      tokens.push({ ...base, imgs: it.imgs?.length ? it.imgs : it.img ? [it.img] : [], disp: it.disp, health: it.health, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
+      const health = it.health ? { ...it.health, text: it.stats?.hp?.max ? hpText(it.stats.hp) : null } : null; // numbers only with full stats
+      tokens.push({ ...base, imgs: it.imgs?.length ? it.imgs : it.img ? [it.img] : [], disp: it.disp, health, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
     } else {
       tokens.push({ ...base, img: it.img || propById(it.prop)?.url || null, canDrag: !!it.movable && role !== 'dm' });
     }
@@ -243,7 +252,7 @@ function buildDm() {
     };
     if (it.kind === 'creature') {
       const hs = healthState(it.hp);
-      tokens.push({ ...base, imgs: creatureImgs(it), disp: it.disp || 'enemy', health: hs ? { ...hs, text: `${it.hp.cur}/${it.hp.max}${it.hp.temp ? ` +${it.hp.temp}` : ''}` } : null, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
+      tokens.push({ ...base, imgs: creatureImgs(it), disp: it.disp || 'enemy', health: hs ? { ...hs, text: hpText(it.hp) } : null, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
     } else tokens.push({ ...base, img: propImg(it) });
   }
   tokens.push(...pcTokens(sceneId, 'dm'));

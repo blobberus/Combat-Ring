@@ -398,10 +398,11 @@ export function project(dm) {
   if (deck) {
     const slides = (deck.slides || []).map((sl) => {
       const img = sl.media ? mediaRef(sl.media) : sl.url ? { url: sl.url } : null;
-      return { img: img && !img.pending ? img : null, pending: !!img?.pending, caption: sl.caption || '', title: sl.title || '', anim: sl.anim || 'none', dur: sl.dur || 8 };
+      // a title or description the DM keeps to themself is not sent at all
+      return { img: img && !img.pending ? img : null, pending: !!img?.pending, caption: sl.hideCaption ? '' : sl.caption || '', title: sl.hideTitle ? '' : sl.title || '', anim: sl.anim || 'none', dur: sl.dur || 8 };
     });
     out.set('show', {
-      on: true, deck: pres.deck, title: deck.title || '', slides, index: clamp(Number(pres.index) || 0, 0, Math.max(0, slides.length - 1)),
+      on: true, deck: pres.deck, title: deck.hideTitle ? '' : deck.title || '', slides, index: clamp(Number(pres.index) || 0, 0, Math.max(0, slides.length - 1)),
       at: pres.at || 0, auto: !!pres.auto, loop: !!deck.loop, transition: deck.transition || 'fade', fit: deck.fit || 'cover',
     });
   } else out.set('show', { on: false });

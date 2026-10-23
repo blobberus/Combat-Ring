@@ -151,6 +151,20 @@ test('slideshow projection', () => {
   assert.equal(show.slides[1].img.url, 'https://x/y.gif');
 });
 
+test('slide titles and descriptions the DM keeps back', () => {
+  const dm = new Map([
+    ['dmeta', { presenting: { deck: 'd1', index: 0 } }],
+    ['deck.d1', { title: 'The Vision', hideTitle: true, slides: [
+      { url: 'https://x/a.jpg', title: 'Ash', caption: 'Smoke rises', hideCaption: true },
+      { url: 'https://x/b.jpg', title: 'The Spire', hideTitle: true, caption: 'It calls' },
+    ] }],
+  ]);
+  const show = M.project(dm).get('show');
+  assert.equal(show.title, '');
+  assert.deepEqual(show.slides.map((s) => [s.title, s.caption]), [['Ash', ''], ['', 'It calls']]);
+  assert.ok(!/Vision|Smoke|Spire/.test(JSON.stringify(show)));
+});
+
 test('initiative ties without the Dexterity scores', () => {
   const dm = new Map([
     ['dmeta', { live: 's1' }],

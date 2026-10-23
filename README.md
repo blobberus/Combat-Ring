@@ -29,7 +29,8 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   and CR / type / size / book filters and the full stat block. *Place* (or drag a row onto the map). New creatures
   can start hidden. **Custom creatures** have their own editor: stat block with live preview, art (upload with a
   circle crop, a bestiary token, or a URL), and *Start from a bestiary creature*.
-- **Token menu** (click a token): HP with Damage / Heal, roll HP, initiative (roll d20 + Dex), size, side (enemy,
+- **Token menu** (click a token): HP with Damage / Heal, roll HP, initiative (roll d20 + Dex), **size** (Tiny to
+  Gargantuan, or Custom: any number of squares across, e.g. 2.5), side (enemy,
   companion, neutral), **what players see of its stats** (nothing, a health bar, or the full stat block), conditions,
   the name players see (e.g. "Hooded figure"), a light it carries, hide / show, duplicate, order, lock, delete.
 - **Props** (Props panel): crates, barrels, carts, a covered wagon, tables, doors, trapdoors, chests, boulders, trees,
@@ -41,7 +42,9 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   and the banner: **location name** and **time of day**, each hidden from players until you tick "Show".
 - **Slides** (Slides panel): image decks for transitions, with titles and captions, slow zoom / pan / drift / pulse
   animations, crossfade / slow fade / slide / cut transitions, auto-advance and loop. GIFs and videos play as they
-  are. Present, step through, or *Peek* to keep working on the board while it runs.
+  are. The deck title and each slide's title and description can be kept from the players ("Players see …"
+  boxes; the text isn't sent to them). Present and step through it; on your own screen switch it between
+  **Full screen**, **Corner** and **Hidden** to keep working on other scenes while the players watch.
 - **Player view** (DM view / Player view switch, or Shift+P): the live scene exactly as players see it (the curtain
   while it is hidden), or how another scene will look once shown; through the whole party's eyes or one PC's.
 - **Undo / redo** (Ctrl+Z / Ctrl+Shift+Z) for the DM's edits.
@@ -54,6 +57,12 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   species, editable) shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
   Light sources (torches, campfires) light the dark for everyone.
 - **Token art:** upload any image and crop it into a circle; otherwise the sheet's portrait or initials.
+- **Size:** Tiny to Gargantuan, or Custom (any number of squares across), in the token menu or *Customize*.
+- **Hit points and health bar** (optional; the sheet's HP isn't copied): type HP, max and temp, then Damage / Heal.
+  They and the DM always see the numbers; the other players see the bar with HP, the bar only, or nothing, as the
+  player chooses in *Customize*.
+- **Health bar look** (Settings, per device): bar, bar with HP, or off; below or above the token; thin, normal or
+  thick; colored by health or one color. HP numbers show only where that person may see them.
 - **Pins** (P) that everyone sees; the DM resolves them or clears them all.
 - **Initiative:** type their own number; the list sorts itself and shows whose turn it is.
 - Hover any token to see its name; the DM decides how much more they see.

@@ -151,43 +151,81 @@ function fold(label, content, id) {
 
 function toggleIn(list, v) { const s = new Set(list || []); if (s.has(v)) s.delete(v); else s.add(v); return [...s]; }
 
+const numIn = (v, onchange, label, props = {}) => h('input', { class: 'input input-number', type: 'number', value: v ?? '', 'aria-label': label, ...props, onchange: (e) => onchange(e.target.value === '' ? null : Number(e.target.value)) });
+
+/**
+ * HP, max and temp fields with a quick Damage / Heal box (Enter / Shift+Enter). get() -> the current hp (read at
+ * each edit: the menu doesn't redraw while one of its fields has focus); save(hp, label).
+ */
+export function hpBlock(get, save, { formula = '', onRoll = null } = {}) {
+  const now = () => ({ cur: null, max: null, temp: 0, ...(get() || {}) });
+  const hp = now();
+  const put = (next, label) => save({ ...next, cur: next.cur ?? next.max ?? null }, label); // a first max fills the current HP
+  const dmg = h('input', { class: 'input input-number', type: 'number', inputmode: 'numeric', placeholder: '0', 'aria-label': 'Damage or healing' });
+  const apply = (sign) => {
+    const n = Math.abs(Number(dmg.value) || 0);
+    if (!n) return;
+    const cur0 = now();
+    let cur = cur0.cur ?? cur0.max ?? 0, temp = cur0.temp || 0;
+    if (sign < 0) { const fromTemp = Math.min(temp, n); temp -= fromTemp; cur = Math.max(0, cur - (n - fromTemp)); } else cur = Math.min(cur0.max ?? cur + n, cur + n);
+    put({ ...cur0, cur, temp }, sign < 0 ? 'damage' : 'heal');
+    dmg.value = '';
+  };
+  dmg.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(e.shiftKey ? 1 : -1); });
+  return [
+    h('div', { class: 'rg-hp' },
+      field('HP', numIn(hp.cur, (v) => put({ ...now(), cur: v ?? 0 }, 'HP'), 'Current HP')),
+      h('span', { class: 'rg-hp-sep' }, '/'),
+      field('Max', numIn(hp.max, (v) => { const x = now(); put({ ...x, max: v, cur: v == null ? null : x.cur }, 'max HP'); }, 'Max HP', { min: 0 })),
+      field('Temp', numIn(hp.temp || 0, (v) => put({ ...now(), temp: v ?? 0 }, 'temp HP'), 'Temporary HP', { min: 0 }))),
+    h('div', { class: 'rg-menu-row' },
+      h('div', { class: 'rg-hp-quick' }, dmg,
+        h('button', { class: 'btn btn-sm btn-danger', type: 'button', title: 'Damage (Enter)', onclick: () => apply(-1) }, 'Damage'),
+        h('button', { class: 'btn btn-sm', type: 'button', title: 'Heal (Shift+Enter)', onclick: () => apply(1) }, 'Heal')),
+      formula && onRoll ? h('button', { class: 'btn btn-ghost btn-sm', type: 'button', title: `Roll ${formula}`, onclick: onRoll }, icon('d20'), 'Roll HP') : null),
+  ];
+}
+
+const SIZE_OPTIONS = [
+  ['tiny', 'Tiny · ½ square'], ['small', 'Small · 1 square'], ['medium', 'Medium · 1 square'],
+  ['large', 'Large · 2 × 2'], ['huge', 'Huge · 3 × 3'], ['gargantuan', 'Gargantuan · 4 × 4'],
+];
+
+/**
+ * Token size: a 5e size or any number of squares across (Custom). value: a size name or a number of squares;
+ * onchange gets the name, or the number for Custom.
+ */
+export function sizeControl(value, onchange) {
+  const named = SIZE_NAMES.includes(value) ? value : null;
+  const cells = sizeCells(value);
+  const num = h('input', {
+    class: 'input input-number', type: 'number', min: 0.25, max: 12, step: 0.25, value: cells, 'aria-label': 'Squares across',
+    onchange: (e) => { const n = Math.round(Math.min(12, Math.max(0.25, Number(e.target.value) || 1)) * 100) / 100; e.target.blur(); onchange(n); },
+  });
+  return h('div', { class: 'row row-nowrap rg-size' },
+    select([...SIZE_OPTIONS.map(([v, label]) => ({ value: v, label })), { value: 'custom', label: 'Custom…' }], named || 'custom', (v) => onchange(v === 'custom' ? cells : v), { 'aria-label': 'Size' }),
+    named ? null : [num, h('span', { class: 'muted text-sm' }, 'squares')]);
+}
+
 // ---------- DM: creature ----------
 
 function creatureMenu(key, it) {
   const id = keyTail(key);
   const p = (fields, label) => A.patchItem(id, fields, label);
   const st = it.stats || {};
-  const hp = it.hp || { cur: 0, max: 0, temp: 0 };
   const sub = [st.type, st.cr != null && st.cr !== '' ? `CR ${st.cr}` : null, st.ac != null ? `AC ${st.ac}` : null, st.ref?.src].filter(Boolean).join(' · ');
   const art = it.media || it.img || it.tokens?.[0] || null;
-  const dmg = h('input', { class: 'input input-number', type: 'number', inputmode: 'numeric', placeholder: '0', 'aria-label': 'Damage or healing' });
-  const applyHp = (sign) => {
-    const n = Math.abs(Number(dmg.value) || 0);
-    if (!n) return;
-    let { cur, max, temp = 0 } = hp;
-    if (sign < 0) { const fromTemp = Math.min(temp, n); temp -= fromTemp; cur = Math.max(0, cur - (n - fromTemp)); } else cur = Math.min(max, cur + n);
-    p({ hp: { ...hp, cur, temp } }, sign < 0 ? 'damage' : 'heal');
-    dmg.value = '';
-  };
-  dmg.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyHp(e.shiftKey ? 1 : -1); });
-  const num = (v, onchange, label) => h('input', { class: 'input input-number', type: 'number', value: v ?? '', 'aria-label': label, onchange: (e) => onchange(e.target.value === '' ? null : Number(e.target.value)) });
   const dexMod = abilityMod(st.abilities?.dex ?? it.tie ?? 10);
+  // the size menu shows the chosen 5e size (Small and Medium are both 1 square), or Custom with the squares across
+  const w = it.w || 1;
+  const size = it.size === 'custom' ? w : it.size && sizeCells(it.size) === w ? it.size : SIZE_NAMES.find((s) => s !== 'small' && sizeCells(s) === w) || w;
   return [
     head(art, it.name, sub, { editName: (v) => v && p({ name: v }, 'rename') }),
-    h('div', { class: 'rg-hp' },
-      field('HP', num(hp.cur, (v) => p({ hp: { ...hp, cur: v ?? 0 } }, 'HP'), 'Current HP')),
-      h('span', { class: 'rg-hp-sep' }, '/'),
-      field('Max', num(hp.max, (v) => p({ hp: { ...hp, max: v ?? 0 } }, 'max HP'), 'Max HP')),
-      field('Temp', num(hp.temp || 0, (v) => p({ hp: { ...hp, temp: v ?? 0 } }, 'temp HP'), 'Temporary HP'))),
+    ...hpBlock(() => world.d(K.item(id))?.hp, (hp, label) => p({ hp }, label), { formula: it.hpFormula, onRoll: () => { const r = Math.max(1, rollFormula(it.hpFormula)); p({ hp: { cur: r, max: r, temp: 0 } }, 'roll HP'); } }),
     h('div', { class: 'rg-menu-row' },
-      h('div', { class: 'rg-hp-quick' }, dmg,
-        h('button', { class: 'btn btn-sm btn-danger', type: 'button', title: 'Damage (Enter)', onclick: () => applyHp(-1) }, 'Damage'),
-        h('button', { class: 'btn btn-sm', type: 'button', title: 'Heal (Shift+Enter)', onclick: () => applyHp(1) }, 'Heal')),
-      it.hpFormula ? h('button', { class: 'btn btn-ghost btn-sm', type: 'button', title: `Roll ${it.hpFormula}`, onclick: () => { const r = Math.max(1, rollFormula(it.hpFormula)); p({ hp: { cur: r, max: r, temp: 0 } }, 'roll HP'); } }, icon('d20'), 'Roll HP') : null),
-    h('div', { class: 'rg-menu-row' },
-      field('Initiative', h('div', { class: 'row row-nowrap' }, num(it.init, (v) => p({ init: v }, 'initiative'), 'Initiative'),
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: `Roll d20 ${fmtMod(dexMod)}`, 'aria-label': 'Roll initiative', onclick: () => p({ init: rollFormula('1d20') + dexMod }, 'roll initiative') }, icon('d20')))),
-      field('Size', select(SIZE_NAMES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) })), sizeName(it.w), (v) => { const n = sizeCells(v); p({ w: Math.max(n, 0.5), h: Math.max(n, 0.5) }, 'size'); }))),
+      field('Initiative', h('div', { class: 'row row-nowrap' }, numIn(it.init, (v) => p({ init: v }, 'initiative'), 'Initiative'),
+        h('button', { class: 'btn-icon btn-sm', type: 'button', title: `Roll d20 ${fmtMod(dexMod)}`, 'aria-label': 'Roll initiative', onclick: () => p({ init: rollFormula('1d20') + dexMod }, 'roll initiative') }, icon('d20'))))),
+    field('Size', sizeControl(size, (v) => { const n = Math.max(sizeCells(v), 0.25); p({ w: n, h: n, size: typeof v === 'string' ? v : 'custom' }, 'size'); })),
     field('Side', segmented([{ value: 'enemy', label: 'Enemy' }, { value: 'ally', label: 'Companion' }, { value: 'neutral', label: 'Neutral' }], it.disp || 'enemy', (v) => p({ disp: v }, 'side'))),
     field('Players see its stats', segmented([{ value: 'none', label: 'No' }, { value: 'hp', label: 'Health' }, { value: 'full', label: 'Full' }], it.statsVisible || 'none', (v) => p({ statsVisible: v }, 'stats visibility')),
       it.statsVisible === 'full' ? 'Players can open its stat block.' : it.statsVisible === 'hp' ? 'Players see a health bar (Unhurt, Hurt, Bloodied, Down).' : 'Players see only its name.'),
@@ -207,11 +245,6 @@ function creatureMenu(key, it) {
   ];
 }
 
-function sizeName(cells) {
-  const n = Number(cells) || 1;
-  if (n < 1) return 'tiny';
-  return { 1: 'medium', 2: 'large', 3: 'huge', 4: 'gargantuan' }[n] || 'medium';
-}
 
 // ---------- DM: prop ----------
 
@@ -283,25 +316,31 @@ function pcMenu(key, dm) {
   const pr = pcProfile(charId);
   if (!pr) return null;
   const mine = me.owns(charId);
-  const canEdit = mine || world.dm;
+  const canEdit = mine || dm;
   const prefs = world.t(K.pc(charId)) || {};
-  const setPrefs = (fields) => world.tPut(K.pc(charId), { ...prefs, ...fields });
+  const setPrefs = (fields) => world.tPut(K.pc(charId), { ...(world.t(K.pc(charId)) || {}), ...fields }); // fresh: see hpBlock
   const ini = world.t(K.ini(`pc-${charId}`));
   const out = [head(pr.img, pr.name, [pr.owner && `Played by ${pr.owner}`, `Speed ${pr.speed} ft`, pr.darkvision ? `Darkvision ${pr.darkvision} ft` : null].filter(Boolean).join(' · '))];
   if (canEdit) {
+    out.push(...hpBlock(() => world.t(K.pc(charId))?.hp, (hp) => setPrefs({ hp: hp.max || hp.cur ? hp : null })));
+    out.push(h('div', { class: 'rg-menu-row' },
+      field('Initiative', h('input', { class: 'input input-number', type: 'number', value: ini?.value ?? '', placeholder: '—', onchange: (e) => A.setPcInit(charId, e.target.value === '' ? null : Number(e.target.value)) })),
+      field('Size', sizeControl(pr.size, (v) => setPrefs({ size: v })))));
     out.push(field('Ranges', h('div', { class: 'rg-conds' }, pr.ranges.map((r, i) => h('button', {
       class: ['chip', r.on && 'is-active'], type: 'button',
       onclick: () => { const base = prefs.ranges || [{ id: 'move', label: 'Move', ft: null, on: true }]; setPrefs({ ranges: base.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) }); },
     }, `${r.label} ${r.ft} ft`)))));
     out.push(field('Show ranges', segmented([{ value: 'selected', label: 'Selected' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }], pr.showRanges, (v) => setPrefs({ showRanges: v }))));
-    out.push(field('Initiative', h('input', { class: 'input input-number', type: 'number', value: ini?.value ?? '', placeholder: '—', onchange: (e) => A.setPcInit(charId, e.target.value === '' ? null : Number(e.target.value)) })));
     out.push(fold(`Conditions${pr.conditions?.length ? ` (${pr.conditions.length})` : ''}`, condChips(pr.conditions, (c) => setPrefs({ conditions: toggleIn(pr.conditions, c) })), 'conditions'));
-  } else if (pr.conditions?.length) out.push(h('p', { class: 'rg-menu-meta' }, pr.conditions.join(', ')));
+  } else {
+    const hs = token()?.health; // what this player may see of another PC's health (its player chooses)
+    if (hs) out.push(h('p', { class: 'rg-menu-meta' }, hs.text ? `HP ${hs.text}` : `Health: ${hs.word}`));
+    if (pr.conditions?.length) out.push(h('p', { class: 'rg-menu-meta' }, pr.conditions.join(', ')));
+  }
   out.push(h('div', { class: 'rg-menu-actions' },
     canEdit ? act('edit', 'Customize…', () => openPcEditor(charId)) : null,
     h('span', { class: 'spacer' }),
     canEdit ? iconAct('trash', 'Take off the map', () => A.deleteKeys([currentKey])) : null));
-  void dm;
   return out;
 }
 
@@ -313,7 +352,8 @@ function publicMenu(key) {
   if (it.kind === 'notice') return [head(null, it.name, 'Notice'), it.text ? h('p', { class: 'rg-menu-text' }, it.text) : null];
   const side = it.kind === 'creature' ? (it.disp === 'ally' ? 'Companion' : it.disp === 'neutral' ? 'Neutral' : 'Enemy') : 'Object';
   const out = [head(it.imgs?.[0] || it.img || null, it.name || (it.kind === 'creature' ? 'Creature' : 'Object'), side, { prop: it.kind === 'prop' })];
-  if (it.health) out.push(h('p', { class: 'rg-menu-meta' }, `Health: ${it.health.word}`));
+  const hs = token()?.health || it.health;
+  if (hs) out.push(h('p', { class: 'rg-menu-meta' }, hs.text ? `HP ${hs.text}` : `Health: ${hs.word}`));
   if (it.conditions?.length) out.push(h('p', { class: 'rg-menu-meta' }, it.conditions.join(', ')));
   if (it.stats) out.push(h('div', { class: 'rg-menu-actions' }, act('book-open', 'Stat block', () => openDetails(currentKey))));
   if (it.kind === 'prop' && it.movable) out.push(h('p', { class: 'rg-menu-meta' }, 'You can drag this.'));

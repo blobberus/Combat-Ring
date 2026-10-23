@@ -101,6 +101,8 @@ export function pcProfile(charId) {
     showRanges: p.showRanges ?? 'selected', // 'selected' | 'always' | 'never'
     light: p.light || null,
     conditions: p.conditions || [],
+    hp: p.hp || null, // optional, typed by the player or the DM (the sheet's stats are not copied)
+    hpShow: p.hpShow || 'bar', // what the other players see of it: 'numbers' | 'bar' | 'private'
     missing: !c, // the sheet was deleted in Stone-Wardens
   };
 }

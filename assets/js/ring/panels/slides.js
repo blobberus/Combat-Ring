@@ -1,6 +1,7 @@
 // Slides (DM): decks of images for transitions (arrival at a city, a vision, a time skip). Each slide has a title,
-// a caption, an animation (slow zoom, pan, drift, pulse) and a duration; a deck has its transition, fit, auto-advance
-// and loop. Images are sealed until the deck is presented. GIFs and videos play as they are.
+// a description (each can be kept from the players), an animation (slow zoom, pan, drift, pulse) and a duration; a
+// deck has its title, transition, fit, auto-advance and loop. Images are sealed until the deck is presented. GIFs and
+// videos play as they are.
 import { h, clear, add } from '../../core/dom.js';
 import { icon, toast, confirmDialog, promptDialog, select, checkbox, field, segmented } from '../../core/ui.js';
 import { world } from '../world.js';
@@ -50,7 +51,8 @@ function deckEditor(el, id) {
       h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => { editing = null; world.invalidate(); } }, icon('chevron-left'), 'All decks'),
       h('span', { class: 'spacer' }),
       presenting ? h('button', { class: 'btn btn-sm', type: 'button', onclick: endShow }, 'End') : h('button', { class: 'btn btn-primary btn-sm', type: 'button', disabled: !deck.slides?.length, onclick: () => presentDeck(id) }, icon('eye'), 'Present')),
-    field('Title', h('input', { class: 'input', value: deck.title || '', placeholder: 'Shown in the corner (optional)', onchange: (e) => set({ title: e.target.value }) })),
+    field('Title', h('input', { class: ['input', deck.hideTitle && 'is-dm-only'], value: deck.title || '', placeholder: 'Shown in the corner (optional)', onchange: (e) => set({ title: e.target.value }) })),
+    checkbox(!deck.hideTitle, (v) => set({ hideTitle: !v }), 'Players see this title'),
     h('div', { class: 'field-grid' },
       field('Transition', select(TRANSITIONS, deck.transition || 'fade', (v) => set({ transition: v }))),
       field('Fit', segmented([{ value: 'cover', label: 'Fill' }, { value: 'contain', label: 'Whole image' }], deck.fit || 'cover', (v) => set({ fit: v })))),
@@ -69,8 +71,11 @@ function deckEditor(el, id) {
           presenting ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Show this slide now', 'aria-label': 'Show now', onclick: () => slideTo(i) }, icon('eye')) : null,
           h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Remove', 'aria-label': 'Remove', onclick: () => set({ slides: deck.slides.filter((_, j) => j !== i) }) }, icon('trash')))),
       h('div', { class: 'cr-slide-main stack stack-sm' },
-        h('input', { class: 'input', value: s.title || '', placeholder: 'Title', 'aria-label': 'Title', onchange: (e) => setSlide(i, { title: e.target.value }) }),
-        h('textarea', { class: 'textarea', rows: 2, value: s.caption || '', placeholder: 'Caption', 'aria-label': 'Caption', onchange: (e) => setSlide(i, { caption: e.target.value }) }),
+        h('input', { class: ['input', s.hideTitle && 'is-dm-only'], value: s.title || '', placeholder: 'Title', 'aria-label': 'Title', onchange: (e) => setSlide(i, { title: e.target.value }) }),
+        h('textarea', { class: ['textarea', s.hideCaption && 'is-dm-only'], rows: 2, value: s.caption || '', placeholder: 'Description', 'aria-label': 'Description', onchange: (e) => setSlide(i, { caption: e.target.value }) }),
+        h('div', { class: 'row cr-slide-vis' },
+          checkbox(!s.hideTitle, (v) => setSlide(i, { hideTitle: !v }), 'Players see the title'),
+          checkbox(!s.hideCaption, (v) => setSlide(i, { hideCaption: !v }), 'Players see the description')),
         h('div', { class: 'row row-nowrap' },
           select(ANIMS, s.anim || 'none', (v) => setSlide(i, { anim: v }), { 'aria-label': 'Animation' }),
           h('input', { class: 'input input-number', type: 'number', min: 2, max: 120, value: s.dur || 8, title: 'Seconds on screen (when advancing by itself)', 'aria-label': 'Seconds', onchange: (e) => setSlide(i, { dur: Math.max(2, Number(e.target.value) || 8) }) }),

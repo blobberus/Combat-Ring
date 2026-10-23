@@ -153,7 +153,8 @@ export function startPlacing(payload) {
 }
 
 export const hasChanges = (changes, prefixes, room = 'both') => {
+  if (changes.table?.has?.('#') || changes.dm?.has?.('#')) return true; // world.invalidate(): redraw everything
   const sets = room === 'both' ? [changes.table, changes.dm] : [changes[room]];
-  for (const s of sets) for (const k of s || []) if (k === '#' || prefixes.some((p) => k.startsWith(p))) return true;
+  for (const s of sets) for (const k of s || []) if (prefixes.some((p) => k.startsWith(p))) return true;
   return false;
 };
