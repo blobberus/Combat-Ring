@@ -38,7 +38,8 @@ undo, `me`), `state.js` (local UI state), `view.js` (view model per role), `boar
 `tools.js` (pointer tools), `actions.js` (every mutation), `menu.js` (token menu, stat block modal), `app.js`
 (shell: top bar, tools, zoom, DM bar, banner, tooltip, keys), `panels/` (party, initiative, pins; DM: scenes,
 creatures, props, slides, table = scene settings), `editors/` (scene/map, creature, PC token, crop), `slideshow.js`,
-`projector.js`, `persist.js`, `media.js`, `characters.js`, `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
+`projector.js`, `persist.js`, `media.js`, `characters.js`, `sheets.js` (live HP / conditions / senses / speed from
+the SW sheets), `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
 `presence.js`, `dialogs.js`, `sandbox-seed.js`.
 
 ## Data flow
@@ -48,6 +49,14 @@ creatures, props, slides, table = scene settings), `editors/` (scene/map, creatu
 - **Data repo** = Stone-Wardens (the token only covers it). Combat-Ring writes only under `content/combat-ring/`
   (SW's Pages workflow ignores `content/**`). It reads `content/characters/*.json`, `srd/species.json` +
   `srd/stubs/species.json` (+ `content/library/species/`) for speed/darkvision defaults, `content/locations/` names.
+- **Sheets, live** (`sheets.js`): PC hit points, conditions + Exhaustion, senses and speed are SW's and read-only
+  here. Computed with **SW's own rules engine**, imported at runtime from the SW site
+  (`config.stoneWardens` + `assets/js/views/characters/engine.js`: `buildRules`, `derive`; SRD from its `srd/`):
+  if SW moves or renames that file or changes those two functions, update `sheets.js` (it falls back to rough numbers,
+  `model.sheetVitals`). Copies: the repo file (DM polls `content/characters/` every 4 s via ETag, players 20 s), SW's
+  drafts in the same browser (`localStorage` `sw:drafts:<owner>/<repo>`, `storage` event), and `sheet.<char>` on the
+  table (first to see a newer one publishes). Locally, the engine loads only when both repos are served side by side
+  (`/Combat-Ring/` and `/Stone-Wardens/` under one server root).
 - **Live:** `core/bus.js` over two public MQTT brokers; rooms `table` (key from token) and `dm` (key from DM data
   key). Everything on the board is a bus object; see docs/live-model.md for keys. Writes go through `world.put`
   (`actions.js` for app logic). The DM's `projector.js` publishes what players may see (`model.project`).

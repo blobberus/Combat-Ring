@@ -14,6 +14,12 @@ import { mediaUrl } from '../media.js';
 import { draggable, startPlacing, hasChanges } from './index.js';
 import { previewing } from '../view.js';
 
+/** HP, conditions, speed and darkvision as the Stone Wardens sheet has them. */
+function vitalsLine(p, senses) {
+  return [p.hp ? `HP ${p.hp.cur} / ${p.hp.max}${p.hp.temp ? ` +${p.hp.temp}` : ''}` : null, ...p.conditions,
+    senses ? `Speed ${p.speed} ft` : null, senses && p.darkvision ? `darkvision ${p.darkvision} ft` : null].filter(Boolean).join(' · ');
+}
+
 function art(p) {
   const el = h('span', { class: 'cr-char-art', style: { '--accent-tok': p.accent || '' } }, (p.name || '?').slice(0, 1).toUpperCase());
   if (p.img) mediaUrl(p.img).then((u) => { if (u) mount(el, h('img', { src: u, alt: '' })); }).catch(() => {});
@@ -24,7 +30,7 @@ export default {
   id: 'party',
   title: 'Party',
   icon: 'users',
-  relevant: (c) => hasChanges(c, ['pc.', 'pct.', 'meta', 'dmeta', 'scene.']),
+  relevant: (c) => hasChanges(c, ['pc.', 'pct.', 'meta', 'dmeta', 'scene.', 'sheet.']),
   render(el, { board }) {
     clear(el);
     const sceneId = currentSceneId();
@@ -42,7 +48,7 @@ export default {
         const p = pcProfile(c.id);
         const placed = sceneId && world.t(K.pct(sceneId, c.id));
         add(el, h('section', { class: 'cr-me' },
-          h('div', { class: 'cr-me-head' }, art(p), h('div', null, h('div', { class: 'cr-me-name' }, p.name), h('div', { class: 'muted text-xs' }, `Speed ${p.speed} ft${p.darkvision ? ` · darkvision ${p.darkvision} ft` : ''}`))),
+          h('div', { class: 'cr-me-head' }, art(p), h('div', null, h('div', { class: 'cr-me-name' }, p.name), h('div', { class: 'muted text-xs' }, vitalsLine(p, true)))),
           h('div', { class: 'cr-me-ranges' }, p.ranges.filter((r) => r.ft > 0).map((r) => h('span', { class: ['chip', r.on && 'is-active'], title: r.on ? 'Shown around your token' : 'Hidden' }, `${r.label} ${r.ft} ft`))),
           sceneId && !canHandlePc(c.id, sceneId) ? h('p', { class: 'cr-me-lock' }, icon('lock'), placed ? 'The DM moves your token. Drag it to measure a move or a shot.' : 'The DM places your token.') : null,
           h('div', { class: 'row' },
@@ -78,7 +84,8 @@ export default {
         art(p),
         h('div', { class: 'cr-row-main' },
           h('div', { class: 'cr-row-title' }, p.name, online.has(c.id) ? h('span', { class: 'rg-dot cr-online', title: 'Online' }) : null),
-          h('div', { class: 'cr-row-sub' }, [p.owner && `Played by ${p.owner}`, pos ? 'on the board' : 'not on the board', dm && sceneId ? (open ? `${who} can move it` : 'locked') : null].filter(Boolean).join(' · '))),
+          h('div', { class: 'cr-row-sub' }, [p.owner && `Played by ${p.owner}`, pos ? 'on the board' : 'not on the board', dm && sceneId ? (open ? `${who} can move it` : 'locked') : null].filter(Boolean).join(' · ')),
+          dm && vitalsLine(p, false) ? h('div', { class: 'cr-row-sub' }, vitalsLine(p, false)) : null),
         dm && sceneId ? h('button', { class: ['btn-icon btn-sm', open && 'is-open'], type: 'button', title: open ? `Unlocked: ${who} can move it. Click to lock it.` : `Locked: only you move it. Click to let ${who} move it.`, 'aria-label': open ? `Lock ${p.name}` : `Unlock ${p.name} for ${who}`, onclick: () => setPcLocked(c.id, open, sceneId) }, icon(open ? 'unlock' : 'lock')) : null,
         handles && !pos ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Place on the board', 'aria-label': 'Place on the board', onclick: () => startPlacing({ kind: 'pc', charId: c.id, name: p.name }) }, icon('plus')) : null,
         can ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Customize the token', 'aria-label': 'Customize', onclick: () => openPcEditor(c.id) }, icon('edit')) : null);

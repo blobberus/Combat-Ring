@@ -11,6 +11,7 @@ import { getBoard } from './app.js';
 import { previewing } from './view.js';
 import { statBlock, fetchMonster } from './bestiary.js';
 import { pcProfile } from './characters.js';
+import { sheetUrl } from './sheets.js';
 import { openPcEditor } from './editors/pc-editor.js';
 import { cachedUrl, mediaUrl } from './media.js';
 import { colorFor } from './tools.js';
@@ -358,6 +359,25 @@ function noteMenu(key, it) {
 
 // ---------- PCs ----------
 
+/**
+ * A character's hit points and conditions as its Stone Wardens sheet has them (read-only here: they change on the
+ * sheet, and the table follows within seconds), with a link to the sheet.
+ */
+export function sheetBlock(pr) {
+  const hp = pr.hp;
+  const hs = healthState(hp);
+  const note = !pr.sheet ? 'Reading the Stone Wardens sheet…' : pr.sheet.approx ? 'From the Stone Wardens sheet (rough numbers: its rules didn’t load)' : 'From the Stone Wardens sheet';
+  return h('div', { class: 'rg-sheet' },
+    h('div', { class: 'rg-sheet-hp' },
+      h('span', { class: 'rg-sheet-label' }, 'HP'),
+      hp ? h('span', { class: 'rg-sheet-num' }, `${hp.cur} / ${hp.max}`) : h('span', { class: 'muted' }, '—'),
+      hp?.temp ? h('span', { class: 'rg-sheet-temp' }, `+${hp.temp} temp`) : null,
+      hs ? h('span', { class: ['rg-sheet-bar', `is-${hs.word.toLowerCase()}`], role: 'img', 'aria-label': hs.word }, h('span', { style: { width: `${hs.pct}%` } })) : null),
+    pr.conditions.length ? h('div', { class: 'rg-conds' }, pr.conditions.map((c) => h('span', { class: 'chip is-active' }, c))) : null,
+    h('div', { class: 'rg-sheet-foot' }, h('span', null, note),
+      h('a', { class: 'btn btn-ghost btn-sm', href: sheetUrl(pr.id), target: '_blank', rel: 'noopener', title: 'Hit points and conditions change on the sheet' }, icon('book-open'), 'Open the sheet')));
+}
+
 function pcMenu(key, dm) {
   const parts = key.split('.');
   const charId = parts.slice(2).join('.');
@@ -381,7 +401,7 @@ function pcMenu(key, dm) {
     out.push(h('p', { class: 'rg-menu-meta' }, icon('lock'), ' Locked by the DM. Drag your token to measure a move or a shot; it stays put.'));
   }
   if (canEdit) {
-    out.push(...hpBlock(() => world.t(K.pc(charId))?.hp, (hp) => setPrefs({ hp: hp.max || hp.cur ? hp : null })));
+    out.push(sheetBlock(pr));
     out.push(h('div', { class: 'rg-menu-row' },
       field('Initiative', h('input', { class: 'input input-number', type: 'number', value: ini?.value ?? '', placeholder: '—', onchange: (e) => A.setPcInit(charId, e.target.value === '' ? null : Number(e.target.value)) })),
       handles ? field('Size', sizeControl(pr.size, (v) => setPrefs({ size: v }))) : null));
@@ -390,7 +410,6 @@ function pcMenu(key, dm) {
       onclick: () => { const base = prefs.ranges || [{ id: 'move', label: 'Move', ft: null, on: true }]; setPrefs({ ranges: base.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) }); },
     }, `${r.label} ${r.ft} ft`)))));
     out.push(field('Show ranges', segmented([{ value: 'selected', label: 'Selected' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }], pr.showRanges, (v) => setPrefs({ showRanges: v }))));
-    out.push(fold(`Conditions${pr.conditions?.length ? ` (${pr.conditions.length})` : ''}`, condChips(pr.conditions, (c) => setPrefs({ conditions: toggleIn(pr.conditions, c) })), 'conditions'));
   } else {
     const hs = token()?.health; // what this player may see of another PC's health (its player chooses)
     if (hs) out.push(h('p', { class: 'rg-menu-meta' }, hs.text ? `HP ${hs.text}` : `Health: ${hs.word}`));

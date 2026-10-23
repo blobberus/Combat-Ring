@@ -192,6 +192,33 @@ test('initiative ties without the Dexterity scores', () => {
   assert.deepEqual(players.map((e) => e.id), dmOrder.map((e) => e.id));
 });
 
+test('a sheet read through the rules engine', () => {
+  const doc = { id: 'a', updated: '2026-10-23T10:00:00.000Z', conditions: ['poisoned', 'grappled'], exhaustion: 2, hp: { current: 9, temp: 0 } };
+  const sheet = { hpMax: 14, hp: { current: 9, temp: 4, max: 14 }, speed: { walk: 0 }, sensesList: ['Darkvision 60 ft.', 'Truesight 90 ft.', 'Blindsight 10 ft.'], darkvision: 60 };
+  const v = M.sheetVitals(doc, sheet, { condNames: { poisoned: 'Poisoned' } });
+  assert.deepEqual(v.hp, { cur: 9, max: 14, temp: 4 });
+  assert.deepEqual(v.conditions, ['Poisoned', 'Grappled', 'Exhaustion 2']);
+  assert.equal(v.darkvision, 90); // Truesight sees in the dark too; Blindsight isn't counted
+  assert.equal(v.speed, 0); // Grappled: the engine's speed is kept, even 0
+  assert.equal(v.at, Date.parse(doc.updated));
+  assert.equal(v.approx, false);
+  assert.equal(M.senseRange(['Darkvision 120 ft.']), 120);
+  assert.equal(M.senseRange(['Blindsight 30 ft.']), 0);
+});
+
+test('a sheet without the rules engine: rough numbers', () => {
+  const doc = { id: 'b', classes: [{ id: 'fighter', level: 3, hp: [10, 6, 7] }], baseAbilities: { con: 15 }, background: { abilityBonuses: { con: 1 } }, hp: { current: null, temp: 2 }, exhaustion: 1 };
+  const v = M.sheetVitals(doc, null, { defaults: { speed: 30, darkvision: 60 } });
+  assert.equal(v.approx, true);
+  assert.deepEqual(v.hp, { cur: 32, max: 32, temp: 2 }); // 23 rolled + 3 × Con +3; no current = full
+  assert.equal(v.speed, 25); // Exhaustion 1: −5 ft
+  assert.equal(v.darkvision, 60);
+  assert.deepEqual(v.conditions, ['Exhaustion 1']);
+  assert.equal(M.sheetVitals({ id: 'c', overrides: { hpMax: 40 }, hp: { current: 50 } }).hp.cur, 40);
+  assert.equal(M.sheetVitals({ id: 'd' }).hp, null); // nothing to go on: no bar rather than a wrong one
+  assert.equal(M.sheetVitals(doc, { hpMax: 0 }).approx, true); // the engine's error fallback has no HP
+});
+
 test('projection diff', () => {
   const next = new Map([['meta', { live: 'a' }], ['it.x', { x: 1 }]]);
   const cur = [['meta', { live: 'a' }], ['it.y', { x: 2 }], ['pin.p', { t: 1 }]];

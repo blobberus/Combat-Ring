@@ -1,14 +1,14 @@
-// A player's token settings (pc.<charId> on the table): token art, color and size, hit points and who sees its health
-// bar, speed and ranges (movement, weapons, spells), darkvision (radius and how it looks to this player) and a light
-// they carry. Changes apply live.
-import { h, clear, add } from '../../core/dom.js';
+// A player's token settings (pc.<charId> on the table): token art, color and size, who sees its health bar, ranges
+// (movement, weapons, spells), how darkvision looks to this player and a light they carry. Changes apply live.
+// Hit points, conditions, senses and speed are the Stone Wardens sheet's (sheets.js): shown here, changed there.
+import { h, clear, add, mount } from '../../core/dom.js';
 import { openModal, field, segmented, checkbox, pickFile, toast, select, icon } from '../../core/ui.js';
 import { world, me } from '../world.js';
 import { party, pcProfile } from '../characters.js';
 import { K, safeKeyPart } from '../model.js';
 import { uploadPlain, mediaUrl } from '../media.js';
 import { cropDialog } from './crop.js';
-import { lightSelect, sizeControl, hpBlock } from '../menu.js';
+import { lightSelect, sizeControl, sheetBlock } from '../menu.js';
 import { canHandlePc } from '../actions.js';
 
 const COLORS = ['#8e1b1b', '#a8321c', '#22507c', '#23675f', '#3b6b2a', '#82600f', '#8f6a14', '#6e3a5c', '#465266', '#5c4a36', '#1f1a14'];
@@ -26,10 +26,22 @@ export function openPcEditor(charId) {
   let timer = 0;
   const later = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 160); };
 
+  // the sheet's numbers follow it while this is open; the rest redraws only on this dialog's own changes
+  const sheetHost = h('div');
+  let sheetSig = '';
+  const drawSheet = () => {
+    const p = pcProfile(charId);
+    const sig = JSON.stringify([p?.hp, p?.conditions, p?.sheet]);
+    if (p && sig !== sheetSig) { sheetSig = sig; mount(sheetHost, sheetBlock(p)); }
+  };
+  const off = world.on(drawSheet);
+
   function draw() {
     const p = pcProfile(charId);
     const raw = prefs();
     clear(body);
+    sheetSig = '';
+    drawSheet();
     // --- art ---
     const preview = h('div', { class: 'cr-pc-art', style: { '--accent-tok': p.accent || '' } });
     if (p.img) mediaUrl(p.img).then((u) => { if (u) add(preview, h('img', { src: u, alt: '' })); }).catch(() => {});
@@ -49,10 +61,10 @@ export function openPcEditor(charId) {
         : field('Size', h('p', { class: 'muted text-sm' }, `${typeof p.size === 'number' ? `${p.size} squares` : p.size}. The DM sets it while your token is locked.`))));
     // --- hit points ---
     add(body, h('section', { class: 'cr-pc-sec' },
-      h('h3', { class: 'cr-pc-h' }, 'Hit points and health bar'),
-      ...hpBlock(() => prefs().hp, (hp) => { set({ hp: hp.max || hp.cur ? hp : null }); draw(); }),
+      h('h3', { class: 'cr-pc-h' }, 'Hit points and conditions'),
+      sheetHost,
       field('Other players see', segmented([{ value: 'numbers', label: 'Bar and HP' }, { value: 'bar', label: 'Bar only' }, { value: 'private', label: 'Nothing' }], p.hpShow, (v) => set({ hpShow: v })),
-        'You and the DM always see your numbers. Optional: the sheet’s HP isn’t copied, so type it here or in the token menu. How bars look (place, thickness, color) is under Settings.')));
+        'You and the DM always see your numbers. They change on your Stone Wardens sheet; the table follows it within seconds. How bars look (place, thickness, color) is under Settings.')));
     // --- movement & ranges ---
     const ranges = raw.ranges || [{ id: 'move', label: 'Move', ft: null, on: true }];
     const rlist = h('div', { class: 'cr-ranges' });
@@ -76,7 +88,7 @@ export function openPcEditor(charId) {
     });
     add(body, h('section', { class: 'cr-pc-sec' },
       h('h3', { class: 'cr-pc-h' }, 'Movement and ranges'),
-      field('Speed', h('div', { class: 'row row-nowrap' }, h('input', { class: 'input input-number', type: 'number', min: 0, step: 5, value: raw.speed ?? '', placeholder: String(c?.speed ?? 30), onchange: (e) => { set({ speed: e.target.value === '' ? null : Number(e.target.value) }); draw(); } }), h('span', { class: 'muted text-sm' }, 'ft')), `From the sheet: ${c?.speed ?? 30} ft. The Move circle follows it unless you type a number there.`),
+      h('p', { class: 'muted text-sm' }, `Speed ${p.speed} ft, from the sheet (Exhaustion and conditions such as Grappled count). The Move circle follows it unless you type a number there.`),
       rlist, addRange,
       field('Show the circles', segmented([{ value: 'selected', label: 'When selected' }, { value: 'always', label: 'Always' }, { value: 'never', label: 'Never' }], p.showRanges, (v) => set({ showRanges: v })))));
     // --- vision ---
@@ -84,7 +96,9 @@ export function openPcEditor(charId) {
     const slider = (label, key, val, hint) => field(label, h('input', { type: 'range', min: 0, max: 100, value: val, class: 'cr-range', oninput: (e) => later(() => set({ vision: { ...(prefs().vision || {}), [key]: Number(e.target.value) } })) }), hint);
     add(body, h('section', { class: 'cr-pc-sec' },
       h('h3', { class: 'cr-pc-h' }, 'Darkvision'),
-      field('Range', h('div', { class: 'row row-nowrap' }, h('input', { class: 'input input-number', type: 'number', min: 0, step: 5, value: raw.darkvision ?? '', placeholder: String(c?.darkvision ?? 0), onchange: (e) => { set({ darkvision: e.target.value === '' ? null : Number(e.target.value) }); draw(); } }), h('span', { class: 'muted text-sm' }, 'ft')), `From the sheet’s species: ${c?.darkvision ? `${c.darkvision} ft` : 'none'}. In dim or dark scenes you see this far, in fading gray.`),
+      h('p', { class: 'muted text-sm' }, p.darkvision
+        ? `${p.senses.join(', ') || `Darkvision ${p.darkvision} ft.`} From the sheet. In dim or dark scenes you see ${p.darkvision} ft, in fading gray${p.senses.some((x) => /^truesight/i.test(x)) ? ' (Truesight counts)' : ''}.`
+        : `${p.senses.length ? `${p.senses.join(', ')} ` : ''}No darkvision on the sheet: in dim or dark scenes you see only what light reaches.`),
       checkbox(!!v.show, (on) => set({ vision: { ...(prefs().vision || {}), show: on } }), 'Show my darkvision edge on the map'),
       slider('Edge softness', 'soft', v.soft ?? 45, 'How gradually the darkvision fades out at its edge.'),
       slider('Gray', 'gray', v.gray ?? 85, 'How colorless darkvision looks in darkness.'),
@@ -110,6 +124,6 @@ export function openPcEditor(charId) {
   }
 
   draw();
-  openModal({ title: `${pcProfile(charId)?.name || 'Character'} · token`, body, wide: true, className: 'modal-pc', actions: [{ label: 'Done', kind: 'primary' }] });
+  openModal({ title: `${pcProfile(charId)?.name || 'Character'} · token`, body, wide: true, className: 'modal-pc', actions: [{ label: 'Done', kind: 'primary' }], onClose: off });
 }
 

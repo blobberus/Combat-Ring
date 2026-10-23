@@ -49,6 +49,23 @@ class Repo {
     return this.treeP;
   }
 
+  /**
+   * Re-list one folder (its direct files) without the whole tree: true when it changed since the last look (the first
+   * look counts as a change). Cheap enough to run every few seconds (see GitHubBackend.listDir).
+   */
+  async refreshDir(dir) {
+    const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+    this.dirTags ||= new Map();
+    const { etag, files, left } = await this.backend.listDir(prefix, this.dirTags.get(prefix) || null);
+    if (left != null) this.rateLeft = left; // GitHub requests left this hour (callers slow down when it runs low)
+    if (!files) return false;
+    this.dirTags.set(prefix, etag);
+    const direct = (p) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/');
+    for (const p of [...this.files.keys()]) if (direct(p)) this.files.delete(p);
+    for (const f of files) this.files.set(f.path, f);
+    return true;
+  }
+
   has(path) { return this.files.has(path); }
   sha(path) { return this.files.get(path)?.sha || null; }
   list(prefix) { return [...this.files.values()].filter((f) => f.path.startsWith(prefix)); }

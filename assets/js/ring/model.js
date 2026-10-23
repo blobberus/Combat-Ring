@@ -37,6 +37,7 @@ export const K = {
   item: (id) => `item.${id}`,
   pub: (id) => `it.${id}`,
   pc: (charId) => `pc.${charId}`,
+  sheet: (charId) => `sheet.${charId}`,
   pct: (scene, charId) => `pct.${scene}.${charId}`,
   pin: (id) => `pin.${id}`,
   ini: (id) => `ini.${id}`,
@@ -250,6 +251,56 @@ export function rollFormula(formula, rand = Math.random) {
     } else total += (m[4] === '-' ? -1 : 1) * Number(m[5]);
   }
   return any ? total : 0;
+}
+
+// ---------- a character's sheet (Stone Wardens) -> what the table shows ----------
+
+const titleCase = (id) => String(id).replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** The farthest of these senses in a sheet's senses list ("Darkvision 60 ft.", "Truesight 30 ft."), 0 if none. */
+export function senseRange(list, kinds = ['darkvision', 'truesight']) {
+  let best = 0;
+  for (const s of list || []) {
+    const m = /^\s*([a-z]+)\D*(\d+)/i.exec(String(s));
+    if (m && kinds.includes(m[1].toLowerCase())) best = Math.max(best, Number(m[2]));
+  }
+  return best;
+}
+
+/**
+ * What the table shows of a character, from its sheet document and (when Stone Wardens' rules engine could run) the
+ * derived sheet: hit points {cur, max, temp}, condition names (+ "Exhaustion n"), senses, darkvision (Truesight
+ * counts: it sees in the dark too), walking speed. at = the sheet's last edit (ms), so the newest copy wins.
+ * Without a derived sheet the numbers are rough (approx): the document's current HP and a max from its hit-die rolls.
+ */
+export function sheetVitals(doc, sheet = null, { condNames = {}, defaults = {} } = {}) {
+  if (!doc) return null;
+  const at = Date.parse(doc.updated || doc.created || '') || 0;
+  const conditions = (Array.isArray(doc.conditions) ? doc.conditions : []).map((id) => condNames[id] || titleCase(id));
+  const exhaustion = Math.max(0, Math.min(6, Number(doc.exhaustion) || 0));
+  if (exhaustion) conditions.push(`Exhaustion ${exhaustion}`);
+  if (sheet && Number(sheet.hpMax) > 0) {
+    const senses = Array.isArray(sheet.sensesList) ? sheet.sensesList.map(String) : [];
+    return {
+      at, approx: false, conditions, exhaustion, senses,
+      hp: { cur: Number(sheet.hp?.current ?? sheet.hpMax), max: Number(sheet.hp?.max ?? sheet.hpMax), temp: Number(sheet.hp?.temp) || 0 },
+      darkvision: Math.max(senseRange(senses), Number(sheet.darkvision) || 0),
+      speed: Number.isFinite(Number(sheet.speed?.walk)) ? Number(sheet.speed.walk) : defaults.speed ?? 30,
+    };
+  }
+  // rough: max HP = the hit-die results the sheet recorded + Constitution per level (or the sheet's override)
+  const level = (doc.classes || []).reduce((n, c) => n + (Number(c.level) || 0), 0);
+  const rolls = (doc.classes || []).flatMap((c) => (Array.isArray(c.hp) ? c.hp : [])).map(Number).filter(Number.isFinite);
+  const con = abilityMod((Number(doc.baseAbilities?.con) || 10) + (Number(doc.background?.abilityBonuses?.con) || 0));
+  const max = Number(doc.overrides?.hpMax) || (rolls.length ? Math.max(level, rolls.reduce((a, b) => a + b, 0) + con * level) : null);
+  const cur = doc.hp?.current ?? max;
+  const dv = Number(defaults.darkvision) || 0;
+  return {
+    at, approx: true, conditions, exhaustion, senses: dv ? [`Darkvision ${dv} ft.`] : [],
+    hp: max ? { cur: Math.min(Number(cur) || 0, max), max, temp: Number(doc.hp?.temp) || 0 } : null,
+    darkvision: dv,
+    speed: Math.max(0, (Number(defaults.speed) || 30) - 5 * exhaustion),
+  };
 }
 
 // ---------- the projection: DM state -> what players see ----------

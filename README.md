@@ -13,7 +13,7 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - **DM:** click **DM** (top right) and enter the DM password. Only the DM's browser can open the DM's state; players
   never receive hidden scenes, creatures, notes or stat blocks. Change the DM password from the DM menu.
 - **Players:** on first visit, give your name and tick your character(s). Characters come straight from the
-  Stone Wardens sheets: name, player and portrait. Stats are not copied.
+  Stone Wardens sheets: name, player and portrait, and live hit points, conditions, darkvision and speed.
 
 ## What the DM can do
 
@@ -40,7 +40,7 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   Select several (Shift+drag a box, or Shift+click) for a group menu: add them all at once, optionally with **one
   roll for the group** so they act together; it also hides, shows or deletes them. Shortcut: **I** adds the selected
   creatures. Creatures on a scene that isn't live keep their number and join the order once it is.
-- **Token menu** (click a token): HP with Damage / Heal, roll HP, initiative (add / roll again / take out), **size** (Tiny to
+- **Creature menu** (click a creature's token): HP with Damage / Heal, roll HP, initiative (add / roll again / take out), **size** (Tiny to
   Gargantuan, or Custom: any number of squares across, e.g. 2.5), side (enemy,
   companion, neutral), **what players see of its stats** (nothing, a health bar, or the full stat block), conditions,
   the name players see (e.g. "Hooded figure"), a light it carries, hide / show, duplicate, order, lock, delete.
@@ -65,14 +65,19 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - Move their own token once the DM unlocks it (snaps to the grid; Alt to place freely). While it is locked,
   **dragging it measures** how far a move or a shot reaches and the token stays put. The **movement circle** follows
   their speed, and they can add their own ranges (Longbow 150 ft, Fire Bolt 120 ft, Dash, anything) in *Customize*.
-- **Darkvision:** in dim or dark scenes the board darkens beyond what they can see; darkvision (from the sheet's
-  species, editable) shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
+- **From the character sheet, live:** hit points (current, max, temp), conditions and Exhaustion, darkvision and
+  speed come from the Stone Wardens sheet and change there, not here (the token menu has *Open the sheet*). An edit
+  shows up at once on a screen where Stone Wardens is open in another tab of the same browser, and on every other
+  screen within a few seconds (the DM's browser checks for new sheet commits every 4 s and shares them). The numbers
+  are worked out with Stone Wardens' own rules, so Exhaustion slows the Move circle and Grappled stops it, as the
+  sheet shows.
+- **Darkvision:** in dim or dark scenes the board darkens beyond what they can see; darkvision (from the sheet;
+  Truesight counts too) shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
   Light sources (torches, campfires) light the dark for everyone.
 - **Token art:** upload any image and crop it into a circle; otherwise the sheet's portrait or initials.
 - **Size:** Tiny to Gargantuan, or Custom (any number of squares across), in the token menu or *Customize*.
-- **Hit points and health bar** (optional; the sheet's HP isn't copied): type HP, max and temp, then Damage / Heal.
-  They and the DM always see the numbers; the other players see the bar with HP, the bar only, or nothing, as the
-  player chooses in *Customize*.
+- **Health bar:** they and the DM always see their numbers; the other players see the bar with HP, the bar only, or
+  nothing, as the player chooses in *Customize*.
 - **Health bar look** (Settings, per device): bar, bar with HP, or off; below or above the token; thin, normal or
   thick; colored by health or one color. HP numbers show only where that person may see them.
 - **Pins** (P) that everyone sees; the DM resolves them or clears them all.

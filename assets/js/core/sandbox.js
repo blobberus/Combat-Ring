@@ -16,6 +16,15 @@ export class SandboxBackend {
     };
   }
 
+  /** Same answer as GitHubBackend.listDir (files: null when unchanged since etag). */
+  async listDir(dir, etag = null) {
+    const prefix = dir.endsWith('/') ? dir : `${dir}/`;
+    const { files: all } = await this.tree();
+    const here = all.filter((f) => f.path.startsWith(prefix) && !f.path.slice(prefix.length).includes('/')).sort((a, b) => a.path.localeCompare(b.path));
+    const tag = here.map((f) => f.sha).join(',');
+    return tag === etag ? { etag, files: null } : { etag: tag, files: here };
+  }
+
   async readBytes(sha) {
     const b = await blobs.get(sha);
     if (b) return b;

@@ -43,7 +43,8 @@ Table room (players read; `world.t`):
 | `it.<item>` | projector | what players see of a creature / prop / triggered notice (name = alias, health or stats if shown) |
 | `ini.dm-<item>` | projector | visible creatures' initiative |
 | `turn`, `show` | projector | combat turn, the slideshow being presented |
-| `pc.<char>` | player / DM | token settings: image, color, size (name or squares), speed, ranges, vision look, light, conditions, `hp` {cur, max, temp} and `hpShow` (`numbers` / `bar` / `private`: what the other players' screens show) |
+| `pc.<char>` | player / DM | token settings: image, color, size (name or squares), ranges, vision look, light and `hpShow` (`numbers` / `bar` / `private`: what the other players' screens show). Older `hp`, `conditions`, `speed`, `darkvision` fields are ignored: the sheet has them |
+| `sheet.<char>` | first to see a change | what the Stone Wardens sheet says (see below): `{at, approx, hp: {cur, max, temp}, conditions, exhaustion, senses, darkvision, speed, by}` |
 | `pct.<scene>.<char>` | player / DM | a PC's position on a scene |
 | `pin.<id>` | anyone | `{scene, x, y, text, color, by, resolved}` |
 | `ini.pc-<char>`, `ini.x-<id>` | player / DM | PC initiative, DM extras (lair actions) |
@@ -62,6 +63,23 @@ A slide's `title` / `caption` and the deck title are left out when the DM untick
 `hideCaption`). A creature's initiative line carries no Dexterity: its `tie` is the rank of that score among the listed creatures
 (`tieRanks`), so players sort ties like the DM without learning the stat. A fast-path change that adds, removes or
 renumbers a line triggers the full projection so the ranks are recomputed.
+
+## Characters' sheets (`ring/sheets.js`, `ring/characters.js`)
+
+Hit points, conditions (with Exhaustion), senses (darkvision; Truesight counts as seeing in the dark) and speed are
+the Stone Wardens sheet's, never edited here: the token menu and *Customize* show them with an *Open the sheet* link.
+The numbers come from Stone Wardens' own rules engine (`<stoneWardens>assets/js/views/characters/engine.js`, its
+`buildRules` + `derive`), with the SRD files from that site (`srd/*.json`, `srd/stubs/*.json`) and the campaign's
+custom library from the repo (`content/library/<kind>/`), so they match the sheet, debuffs included. If the engine
+can't be loaded, `model.sheetVitals` makes rough numbers from the document (`approx: true`, said in the menu).
+
+Three copies, the newest by the sheet's `updated` stamp wins (ties: the engine's over a rough one):
+- the committed file: the DM's browser lists `content/characters/` every 4 s with an ETag (a 304 while nothing
+  changed), players every 20 s, slower when GitHub's hourly allowance runs low (`repo.refreshDir`, `listDir`);
+- Stone Wardens open in another tab of the same browser: same origin, so its drafts (`localStorage`
+  `sw:drafts:<owner>/<repo>`, written ~0.3 s after an edit, committed ~2 s later) are read on the `storage` event;
+- `sheet.<char>` on the table: whoever first sees a newer copy (a draft or a commit) publishes it, so every screen
+  follows within a moment.
 
 ## Images (`ring/media.js`)
 

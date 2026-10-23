@@ -52,6 +52,26 @@ export class GitHubBackend {
     return { head, files };
   }
 
+  /**
+   * The files directly in a folder: {etag, files: [{path, sha, size}], left}, or files: null when nothing changed
+   * since etag (a 304, which GitHub says doesn't count against the rate limit). left: requests left this hour.
+   */
+  async listDir(dir, etag = null) {
+    const res = await fetch(`${API}/repos/${this.owner}/${this.repo}/contents/${dir.replace(/\/+$/, '')}?ref=${encodeURIComponent(this.branch)}`, {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28',
+        ...(etag ? { 'If-None-Match': etag } : {}),
+      },
+    });
+    const left = res.headers.get('x-ratelimit-remaining') == null ? null : Number(res.headers.get('x-ratelimit-remaining'));
+    if (res.status === 304) return { etag, files: null, left };
+    if (res.status === 404) return { etag: null, files: [], left };
+    if (!res.ok) throw new GitHubError(res.status, res.status === 403 && left === 0 ? 'GitHub rate limit reached' : res.statusText);
+    const list = await res.json();
+    return { etag: res.headers.get('ETag'), files: (Array.isArray(list) ? list : []).filter((e) => e.type === 'file').map((e) => ({ path: e.path, sha: e.sha, size: e.size })), left };
+  }
+
   readBytes(sha) {
     return this.request('GET', `/git/blobs/${sha}`, null, { accept: 'application/vnd.github.raw+json', as: 'bytes' });
   }

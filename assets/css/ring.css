@@ -458,6 +458,18 @@
 .rg-conds .chip { height: 26px; font-size: 0.875rem; }
 .rg-menu-text { font: 400 var(--text-sm) / 1.45 var(--font-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 .rg-menu-meta { font: 400 var(--text-xs) / 1.4 var(--font-ui); color: var(--ink-muted); }
+/* a character's HP and conditions, read from its Stone Wardens sheet (menu.js sheetBlock) */
+.rg-sheet { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: var(--radius); background: var(--surface-2); }
+.rg-sheet-hp { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rg-sheet-label { font: 700 var(--text-xs) / 1 var(--font-ui); letter-spacing: 0.06em; color: var(--ink-muted); }
+.rg-sheet-num { font: 700 var(--text-lg) / 1 var(--font-ui); color: var(--ink); font-variant-numeric: tabular-nums; }
+.rg-sheet-temp { font: 500 var(--text-xs) / 1 var(--font-ui); color: var(--ink-muted); }
+.rg-sheet-bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--bg-sunk); }
+.rg-sheet-bar > span { display: block; height: 100%; background: var(--ok); }
+.rg-sheet-bar.is-bloodied > span { background: var(--warn); }
+.rg-sheet-bar.is-down > span { background: var(--danger); }
+.rg-sheet-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; font: 400 var(--text-xs) / 1.35 var(--font-ui); color: var(--ink-muted); }
+.rg-sheet-foot .btn { margin-right: -6px; }
 
 /* ---------- Segmented control (ui.js segmented) ---------------------------- */
 .seg { display: flex; padding: 2px; gap: 2px; border-radius: var(--radius); background: var(--bg-sunk); }

@@ -10,11 +10,13 @@ const SPECIES = [
   { id: 'halfling', name: 'Halfling', size: 'Small', speed: 30, darkvision: null },
 ];
 
+// hit points, conditions and exhaustion as Stone Wardens stores them (the table reads them live)
+const AT = '2026-10-01T12:00:00.000Z';
 const CHARS = [
-  { id: 'brannoc-stoneheart-s1', name: 'Brannoc Stoneheart', player: 'Mira', species: { id: 'dwarf' }, classes: [{ id: 'fighter', level: 3 }], style: { accent: '#8e1b1b' } },
-  { id: 'ilyra-vael-s2', name: 'Ilyra Vael', player: 'Tomas', species: { id: 'elf', subspecies: 'elven-lineage-drow' }, classes: [{ id: 'rogue', level: 3 }], style: { accent: '#22507c' } },
-  { id: 'pell-underbough-s3', name: 'Pell Underbough', player: 'Ana', species: { id: 'halfling' }, classes: [{ id: 'cleric', level: 3 }], style: { accent: '#23675f' } },
-  { id: 'sera-quill-s4', name: 'Sera Quill', player: 'Jun', species: { id: 'human' }, classes: [{ id: 'wizard', level: 3 }], overrides: { speed: 35 }, style: { accent: '#6e3a5c' } },
+  { id: 'brannoc-stoneheart-s1', name: 'Brannoc Stoneheart', player: 'Mira', species: { id: 'dwarf' }, classes: [{ id: 'fighter', level: 3, hp: [10, 6, 7] }], baseAbilities: { str: 16, dex: 12, con: 16, int: 8, wis: 12, cha: 10 }, hp: { current: 22, temp: 0 }, conditions: [], exhaustion: 0, style: { accent: '#8e1b1b' }, updated: AT },
+  { id: 'ilyra-vael-s2', name: 'Ilyra Vael', player: 'Tomas', species: { id: 'elf', subspecies: 'elven-lineage-drow' }, classes: [{ id: 'rogue', level: 3, hp: [8, 5, 4] }], baseAbilities: { str: 8, dex: 16, con: 12, int: 12, wis: 14, cha: 10 }, hp: { current: 20, temp: 0 }, conditions: [], exhaustion: 0, style: { accent: '#22507c' }, updated: AT },
+  { id: 'pell-underbough-s3', name: 'Pell Underbough', player: 'Ana', species: { id: 'halfling' }, classes: [{ id: 'cleric', level: 3, hp: [8, 5, 6] }], baseAbilities: { str: 10, dex: 12, con: 14, int: 10, wis: 16, cha: 12 }, hp: { current: 12, temp: 0 }, conditions: ['poisoned'], exhaustion: 0, style: { accent: '#23675f' }, updated: AT },
+  { id: 'sera-quill-s4', name: 'Sera Quill', player: 'Jun', species: { id: 'human' }, classes: [{ id: 'wizard', level: 3, hp: [6, 4, 3] }], baseAbilities: { str: 8, dex: 14, con: 12, int: 16, wis: 12, cha: 10 }, hp: { current: 16, temp: 3 }, conditions: [], exhaustion: 1, overrides: { speed: 35 }, style: { accent: '#6e3a5c' }, updated: AT },
 ];
 
 export async function seedSandbox() {
