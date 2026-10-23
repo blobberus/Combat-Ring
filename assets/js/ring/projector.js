@@ -69,8 +69,11 @@ function run() {
       p = publicItem(it, { fogShapes: shapes, fogOn });
       if (p) projectItemMedia(p, it, mediaRef);
     }
-    const ini = it && p ? initiativeEntry(id, it, p) : null;
-    for (const [k, v] of [[K.pub(id), p], [K.ini(`dm-${id}`), ini]]) {
+    const shown = world.t(K.ini(`dm-${id}`));
+    const ini = it && p ? initiativeEntry(id, it, p, shown?.tie ?? null) : null;
+    const listChanged = !shown !== !ini || (shown && ini && shown.value !== ini.value); // the tie ranks may change
+    if (listChanged) full = true;
+    for (const [k, v] of listChanged ? [[K.pub(id), p]] : [[K.pub(id), p], [K.ini(`dm-${id}`), ini]]) {
       const cur = world.t(k);
       if (v == null) { if (cur != null) changes.push([k, null]); } else if (JSON.stringify(cur) !== JSON.stringify(v)) changes.push([k, v]);
     }
@@ -78,6 +81,7 @@ function run() {
   }
   items.clear();
   apply(changes);
+  if (full) schedule(); // an initiative line came, went or moved: the full projection re-ranks the list
 }
 
 /** Give the live scene's map, its items' art and the shown slides a public copy. */

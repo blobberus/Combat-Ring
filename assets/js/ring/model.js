@@ -315,10 +315,19 @@ export function projectItemMedia(p, item, mediaRef) {
   return p;
 }
 
-/** A creature's line in the players' initiative list (only for creatures they can see). */
-export function initiativeEntry(id, item, p) {
+/**
+ * A creature's line in the players' initiative list (only for creatures they can see). `tie` is not its Dexterity but
+ * that score's rank among the listed creatures (tieRanks): players get the DM's order without the stat.
+ */
+export function initiativeEntry(id, item, p, tie = null) {
   if (item.kind !== 'creature' || item.init == null || item.init === '' || !p) return null;
-  return { name: p.name || 'Creature', value: Number(item.init), tie: item.tie ?? null, item: id, disp: p.disp, src: 'dm' };
+  return { name: p.name || 'Creature', value: Number(item.init), tie, item: id, disp: p.disp, src: 'dm' };
+}
+
+/** items: [item] -> (item -> rank of its Dexterity tie-breaker among them, 1 = lowest; null without one). */
+export function tieRanks(items) {
+  const scores = [...new Set(items.map((it) => Number(it.tie)).filter((n) => n > 0))].sort((a, b) => a - b);
+  return (it) => { const i = scores.indexOf(Number(it.tie)); return i < 0 ? null : i + 1; };
 }
 
 /**
@@ -366,14 +375,16 @@ export function project(dm) {
       }
     }
     const items = all.filter(([k, v]) => v && k.startsWith('item.') && v.scene === live);
+    const listed = [];
     for (const [k, it] of items) {
       const p = publicItem(it, { fogShapes, fogOn });
       if (!p) continue;
       projectItemMedia(p, it, mediaRef);
       out.set(K.pub(keyTail(k)), p);
-      const ini = initiativeEntry(keyTail(k), it, p);
-      if (ini) out.set(K.ini(`dm-${keyTail(k)}`), ini);
+      if (initiativeEntry(keyTail(k), it, p)) listed.push([keyTail(k), it, p]);
     }
+    const rank = tieRanks(listed.map(([, it]) => it));
+    for (const [id, it, p] of listed) out.set(K.ini(`dm-${id}`), initiativeEntry(id, it, p, rank(it)));
   }
   const turn = dmeta.turn;
   if (turn?.active) {

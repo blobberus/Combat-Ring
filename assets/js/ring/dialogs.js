@@ -146,7 +146,7 @@ export function settingsDialog() {
           ['V', 'Select and move'], ['Space + drag', 'Pan (also right or middle drag)'], ['Wheel', 'Zoom'], ['M', 'Measure'], ['P', 'Drop a pin'],
           ['Double-click', 'Ping the map, or open a token’s details'], ['Arrows', 'Nudge the selection (Shift: 5 squares)'], ['Delete', 'Delete the selection'],
           ['Alt', 'Place without snapping'], ['+ / − / 0', 'Zoom in, out, fit'], ['Esc', 'Cancel'],
-          ...(world.dm ? [['F', 'Fog of war'], ['N', 'Interaction'], ['H', 'Hide / show the selection'], ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'], ['Ctrl+D', 'Duplicate'], ['Ctrl+S', 'Save a backup now'], ['Shift+P', 'Players’ view']] : []),
+          ...(world.dm ? [['F', 'Fog of war'], ['N', 'Interaction'], ['H', 'Hide / show the selection'], ['Shift+H', 'Hide the live scene from the players / show it again'],['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'], ['Ctrl+D', 'Duplicate'], ['Ctrl+S', 'Save a backup now'], ['Shift+P', 'Players’ view']] : []),
         ].flatMap(([k, d]) => [h('dt', null, h('kbd', null, k)), h('dd', null, d)]))),
       h('div', { class: 'row' },
         h('button', { class: 'btn btn-danger btn-sm', type: 'button', onclick: () => { clearAuth(); sessionStorage.removeItem('cr:dm'); localStorage.removeItem('cr:dm'); location.reload(); } }, icon('logout'), 'Lock the ring on this device')),

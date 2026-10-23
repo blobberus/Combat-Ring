@@ -151,6 +151,23 @@ test('slideshow projection', () => {
   assert.equal(show.slides[1].img.url, 'https://x/y.gif');
 });
 
+test('initiative ties without the Dexterity scores', () => {
+  const dm = new Map([
+    ['dmeta', { live: 's1' }],
+    ['scene.s1', { id: 's1', name: 'Yard', cols: 10, rows: 10, grid: { size: 100, ft: 5 } }],
+    ['item.a', { scene: 's1', kind: 'creature', name: 'Ogre', x: 150, y: 150, init: 12, tie: 8, statsVisible: 'none' }],
+    ['item.b', { scene: 's1', kind: 'creature', name: 'Goblin', x: 350, y: 150, init: 12, tie: 14, statsVisible: 'none' }],
+    ['item.c', { scene: 's1', kind: 'creature', name: 'Wolf', x: 550, y: 150, init: 12, tie: 15, hidden: true }],
+  ]);
+  const out = M.project(dm);
+  assert.equal(out.get('ini.dm-a').tie, 1);
+  assert.equal(out.get('ini.dm-b').tie, 2); // ranks among what players see: the hidden wolf leaves no gap
+  for (const [, v] of out) assert.ok(!/"tie":(8|14|15)\b/.test(JSON.stringify(v)));
+  const players = M.sortInitiative([...out].filter(([k]) => k.startsWith('ini.')).map(([k, v]) => ({ id: k, ...v })));
+  const dmOrder = M.sortInitiative([{ id: 'ini.dm-a', name: 'Ogre', value: 12, tie: 8 }, { id: 'ini.dm-b', name: 'Goblin', value: 12, tie: 14 }]);
+  assert.deepEqual(players.map((e) => e.id), dmOrder.map((e) => e.id));
+});
+
 test('projection diff', () => {
   const next = new Map([['meta', { live: 'a' }], ['it.x', { x: 1 }]]);
   const cur = [['meta', { live: 'a' }], ['it.y', { x: 2 }], ['pin.p', { t: 1 }]];

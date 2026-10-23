@@ -98,6 +98,11 @@ input.cr-ini-value { min-height: 32px; padding: 2px 6px; }
 .cr-scene { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .cr-scene.is-viewing { border-color: var(--ink-muted); }
 .cr-scene.is-live { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.cr-scene.is-hidden-live { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.cr-seen { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); padding: 8px 8px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font: 400 var(--text-sm) / 1.3 var(--font-ui); }
+.cr-seen.is-scene { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); background: var(--ok-soft); }
+.cr-seen.is-curtain { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-soft); }
+.cr-seen .rg-seen { min-width: 0; white-space: normal; }
 .cr-scene-open { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 8px; border: 0; background: transparent; text-align: left; color: var(--ink); }
 .cr-scene-open:hover { background: var(--surface-2); }
 .cr-scene-thumb { width: 72px; height: 52px; flex: none; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-3); }

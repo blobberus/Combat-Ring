@@ -20,8 +20,9 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - **Scenes** (Scenes panel): any number of maps. *New scene* sets the size in squares, feet per square, background
   and grid, and places an uploaded image on that grid: drag to move it, wheel or slider to scale it, *Fill* /
   *Fit whole image* / *Match shape*, or *Image pixels per square* to line up a battlemap's own grid. Whatever lies
-  outside the frame is cropped. View and prepare any scene in secret; **Show this scene** makes it live. **Curtain**
-  hides the board from everyone for a moment.
+  outside the frame is cropped. View and prepare any scene in secret; **Show this scene** makes it live. The DM bar
+  always says what the players see (green dot: a scene; amber: hidden). **Hide from players** (DM bar, the live
+  scene's row in Scenes, or Shift+H) lowers the curtain over the live scene until you show it again.
 - **Fog of war** (F): lasso, polygon or rectangle, in *Hide* or *Reveal* mode (Alt flips it), show/hide or erase a
   shape, cover the whole map, lift or restore all fog. Players don't receive creatures or props under fog at all.
 - **Creatures** (Creatures panel): the whole 5etools bestiary (about 4,500 creatures with their token art), with search
@@ -41,7 +42,8 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - **Slides** (Slides panel): image decks for transitions, with titles and captions, slow zoom / pan / drift / pulse
   animations, crossfade / slow fade / slide / cut transitions, auto-advance and loop. GIFs and videos play as they
   are. Present, step through, or *Peek* to keep working on the board while it runs.
-- **Player view** (Shift+P): the board exactly as players see it, through the whole party's eyes or one PC's.
+- **Player view** (DM view / Player view switch, or Shift+P): the live scene exactly as players see it (the curtain
+  while it is hidden), or how another scene will look once shown; through the whole party's eyes or one PC's.
 - **Undo / redo** (Ctrl+Z / Ctrl+Shift+Z) for the DM's edits.
 
 ## What players can do

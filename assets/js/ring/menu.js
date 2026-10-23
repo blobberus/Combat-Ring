@@ -83,7 +83,13 @@ function place() {
   let x = right.x - stage.left + 14;
   if (x + w > stage.width - 12) x = left.x - stage.left - w - 14;
   x = Math.max(12, Math.min(x, stage.width - w - 12));
-  const y = Math.max(64, Math.min(right.y - stage.top - 40, stage.height - hh - 12));
+  // stop above the DM bar when it is underneath, so Show / Hide / Player view stay clickable (phones dock the menu)
+  const phone = matchMedia('(max-width: 760px)').matches;
+  let bottom = stage.height - 12;
+  const bar = document.querySelector('.rg-dmbar:not([hidden])')?.getBoundingClientRect();
+  if (bar && !phone && x < bar.right - stage.left && x + w > bar.left - stage.left) bottom = bar.top - stage.top - 8;
+  host.style.maxHeight = phone ? '' : `${Math.max(160, bottom - 64)}px`;
+  const y = Math.max(64, Math.min(right.y - stage.top - 40, bottom - Math.min(hh, bottom - 64)));
   host.style.left = `${x}px`;
   host.style.top = `${y}px`;
 }
@@ -95,6 +101,7 @@ function draw() {
   const dm = world.dm && !previewing();
   let body = null;
   if (key.startsWith('pin.')) body = pinMenu(key);
+  else if (room === 'dm' && !dm) body = null; // the player view shows only what players get
   else if (room === 'dm') {
     const it = world.d(key);
     if (!it) { closeMenu(); return; }
@@ -345,6 +352,7 @@ export async function openDetails(vk) {
   const { room, key } = parseKey(vk);
   if (key.startsWith('pct.')) { const charId = key.split('.').slice(2).join('.'); if (world.dm || me.owns(charId)) openPcEditor(charId); return; }
   if (key.startsWith('pin.')) { openMenu(vk); return; }
+  if (room === 'dm' && previewing()) return;
   let it = room === 'dm' ? world.d(key) : world.t(key);
   if (!it) return;
   if (it.kind !== 'creature') { openMenu(vk); return; }

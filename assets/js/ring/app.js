@@ -1,13 +1,13 @@
 // The table's shell (Owlbear-style): the board fills the screen; the top bar (scene), the top-right status and people,
 // the tool rail on the left, zoom bottom-left, the DM bar bottom-center and the side panel on the right float over it.
 import { h, clear, add, mount } from '../core/dom.js';
-import { icon, toast } from '../core/ui.js';
+import { icon, toast, segmented } from '../core/ui.js';
 import { getSetting, setSetting, onSetting } from '../core/settings.js';
 import { config } from '../core/auth.js';
 import { world, me } from './world.js';
 import { ui, setUi, onUi, clearSelection, parseKey } from './state.js';
 import { createBoard, isTyping } from './board.js';
-import { buildView, dmScenes, dmViewingId, previewing } from './view.js';
+import { buildView, dmScenes, dmViewingId, previewing, playersSee, playersSeeLine } from './view.js';
 import { handleTool, setToolHooks, setCurrentView, finishPoly, cancelPoly, polyActive, ping } from './tools.js';
 import * as A from './actions.js';
 import { presence, startPresence, announce } from './presence.js';
@@ -97,6 +97,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     if ('placing' in patch || 'viewing' in patch || 'previewChar' in patch) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
   });
   onSetting((k) => {
+    if (k === 'dmPreview') { clearSelection(); closeMenu(); drawTools(); } // no DM menu or DM tools in the player view
     if (['names', 'dmPreview', 'snap', 'diagonals', 'playerName', 'chars'].includes(k)) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
     if (k === 'reduceMotion') app.classList.toggle('reduce-motion', !!getSetting('reduceMotion'));
     if (k === 'playerName' || k === 'chars') { world.setName(me.name()); announce(); }
@@ -114,11 +115,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     sceneBtn.disabled = !dm;
     sceneBtn.title = dm ? 'Switch the scene you are viewing' : '';
     clear(liveBadge);
-    if (dm && vid) {
-      const blackout = !!world.d('dmeta')?.blackout;
-      if (vid === live && !blackout) add(liveBadge, h('span', { class: 'badge badge-ok' }, 'Live'));
-      else add(liveBadge, h('span', { class: 'badge badge-warn' }, blackout && vid === live ? 'Behind the curtain' : 'Players can’t see this'));
-    }
+    if (dm && vid) add(liveBadge, sceneBadge(vid));
     dmBtn.classList.toggle('is-on', world.dm);
     dmBtn.title = world.dm ? 'DM tools' : 'Log in as the DM';
   }
@@ -153,27 +150,35 @@ export function mountRing(app, { sandbox = false } = {}) {
       note ? h('div', { class: 'rg-banner-note' }, note) : null);
   }
 
+  /** The badge beside a scene's name: Live, Hidden (live behind the curtain) or Not shown. */
+  function sceneBadge(id) {
+    const ps = playersSee();
+    if (ps.id !== id) return h('span', { class: 'badge', title: 'Players can’t see this scene' }, 'Not shown');
+    return ps.state === 'scene'
+      ? h('span', { class: 'badge badge-ok', title: 'Players see this scene' }, 'Live')
+      : h('span', { class: 'badge badge-warn', title: 'Live, but hidden: players see the curtain' }, 'Hidden');
+  }
+
+  // Left: what the players see (always the truth). Then only verbs: "Show this scene" when the scene on the board
+  // isn't what they see, "Hide from players" while they see one. Right: DM view / Player view.
   function renderDmBar() {
     if (!world.dm) { dmbar.hidden = true; return; }
-    const dmeta = world.d('dmeta') || {};
     const vid = dmViewingId();
-    const live = dmeta.live;
-    const scenes = dmScenes();
+    const ps = playersSee();
     dmbar.hidden = false;
     dmbar.classList.toggle('is-preview', previewing());
+    dmbar.classList.toggle('is-hidden-scene', ps.state === 'curtain');
     clear(dmbar);
     if (!vid) { add(dmbar, h('span', null, 'Create a scene to begin.'), h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => panel.open('scenes') }, 'Scenes')); return; }
-    const liveName = scenes.find((s) => s.id === live)?.name;
-    const text = previewing()
-      ? h('span', null, icon('eye'), ' Player view', ui.previewChar ? ` · through ${party.get(ui.previewChar)?.name || 'a PC'}` : ' · the whole party')
-      : dmeta.blackout ? h('span', null, 'Players see ', h('strong', null, 'the curtain'))
-        : vid === live ? h('span', null, 'Players see ', h('strong', null, 'this scene'))
-          : h('span', null, 'Players see ', h('strong', null, liveName || 'nothing yet'));
-    add(dmbar, text);
-    if (vid !== live || dmeta.blackout) add(dmbar, h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => A.goLive(vid) }, icon('eye'), 'Show this scene'));
-    add(dmbar, 
-      h('button', { class: ['btn btn-sm', dmeta.blackout && 'is-active'], type: 'button', title: 'Hide the board from the players for a moment', onclick: () => A.setBlackout(!dmeta.blackout) }, icon(dmeta.blackout ? 'eye' : 'eye-off'), dmeta.blackout ? 'Raise curtain' : 'Curtain'),
-      h('button', { class: ['btn btn-sm', previewing() && 'is-active'], type: 'button', title: 'See the board as the players do (Shift+P)', onclick: () => setSetting('dmPreview', !previewing()) }, icon('users'), previewing() ? 'DM view' : 'Player view'));
+    add(dmbar, playersSeeLine(ps));
+    const onBoard = ps.state === 'scene' && ps.id === vid;
+    if (previewing() && !(ps.state === 'curtain' && ps.id === vid)) {
+      add(dmbar, h('span', { class: 'rg-dmbar-note' }, ui.previewChar ? `Through ${party.get(ui.previewChar)?.name || 'a PC'}` : 'Whole party', onBoard ? '' : ' · how this scene will look once shown'));
+    }
+    if (!onBoard) add(dmbar, h('button', { class: 'btn btn-primary btn-sm', type: 'button', title: 'Players see this scene now', onclick: () => A.goLive(vid) }, icon('eye'), 'Show this scene'));
+    if (ps.state === 'scene') add(dmbar, h('button', { class: 'btn btn-sm', type: 'button', title: `Hide “${ps.name}”: players see the curtain until you show a scene (Shift+H)`, onclick: () => A.setBlackout(true) }, icon('eye-off'), 'Hide from players'));
+    add(dmbar, segmented([{ value: 'dm', label: 'DM view', icon: 'dm' }, { value: 'players', label: 'Player view', icon: 'users', title: 'See the board as the players do (Shift+P)' }],
+      previewing() ? 'players' : 'dm', (v) => setSetting('dmPreview', v === 'players'), { className: 'rg-viewseg' }));
     const ss = saveState;
     add(dmbar, h('button', { class: 'btn-icon btn-sm', type: 'button', title: ss.saving ? 'Saving the backup…' : ss.error ? `Backup failed: ${ss.error}` : ss.dirty ? 'Save a backup to the repo now (Ctrl+S)' : 'Backed up', 'aria-label': 'Save backup', onclick: () => saveNow().then(() => toast('Backup saved.', { type: 'success' })).catch((e) => toast(`Backup failed: ${e.message}`, { type: 'error' })) }, icon(ss.error ? 'warning' : ss.dirty ? 'save' : 'check')));
   }
@@ -192,14 +197,14 @@ export function mountRing(app, { sandbox = false } = {}) {
   function scenePicker(anchor) {
     if (!world.dm) return;
     const scenes = dmScenes();
-    const live = world.d('dmeta')?.live;
+    const shown = playersSee().id;
     const box = h('div', { class: 'rg-pop rg-float', role: 'menu' });
     const close = () => { box.remove(); removeEventListener('pointerdown', outside, true); };
     const outside = (e) => { if (!box.contains(e.target) && e.target !== anchor) close(); };
     add(box, h('div', { class: 'rg-pop-title' }, 'Scenes'));
     for (const s of scenes) {
       add(box, h('button', { class: ['rg-pop-item', s.id === dmViewingId() && 'is-active'], type: 'button', onclick: () => { setUi({ viewing: s.id }); clearSelection(); close(); } },
-        h('span', { class: 'truncate' }, s.name || 'Scene'), s.id === live ? h('span', { class: 'badge badge-ok' }, 'Live') : null));
+        h('span', { class: 'truncate' }, s.name || 'Scene'), s.id === shown ? sceneBadge(s.id) : null));
     }
     add(box, h('button', { class: 'rg-pop-item', type: 'button', onclick: () => { close(); panel.open('scenes'); } }, icon('plus'), 'Manage scenes…'));
     const r = anchor.getBoundingClientRect();
@@ -357,12 +362,20 @@ export function mountRing(app, { sandbox = false } = {}) {
     else if (k === 'p') setUi({ tool: 'pin' });
     else if (k === 'f' && dm) setUi({ tool: 'fog' });
     else if (k === 'n' && dm) setUi({ tool: 'note' });
+    else if (k === 'h' && e.shiftKey && world.dm) hideOrShowLive();
     else if (k === 'h' && dm && ui.selected.size) toggleHidden();
     else if (k === '+' || k === '=') board.zoomBy(1.25);
     else if (k === '-') board.zoomBy(0.8);
     else if (k === '0') board.fit();
     else if (k.startsWith('arrow') && ui.selected.size) { e.preventDefault(); nudge(k, e.shiftKey ? 5 : 1); }
   });
+
+  /** Shift+H: hide the live scene from the players, or show the hidden live scene again. */
+  function hideOrShowLive() {
+    const ps = playersSee();
+    if (ps.state === 'scene') A.setBlackout(true);
+    else if (ps.state === 'curtain' && ps.id) A.setBlackout(false);
+  }
 
   function toggleHidden() {
     const keys = [...ui.selected].map(parseKey).filter((x) => x.room === 'dm');

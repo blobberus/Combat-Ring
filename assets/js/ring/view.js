@@ -26,6 +26,23 @@ export const liveSceneId = () => (world.dm ? world.d('dmeta')?.live || null : wo
 /** Is the DM looking at the players' view? */
 export const previewing = () => world.dm && getSetting('dmPreview');
 
+/** What the players see right now (DM side): a scene, the curtain (the live scene hidden) or nothing. */
+export function playersSee() {
+  const dmeta = world.d('dmeta') || {};
+  const s = dmeta.live ? dmScenes().find((x) => x.id === dmeta.live) : null;
+  if (dmeta.blackout) return { state: 'curtain', id: s?.id || null, name: s?.name || null };
+  if (s) return { state: 'scene', id: s.id, name: s.name || 'Scene' };
+  return { state: 'nothing', id: null, name: null };
+}
+
+/** The DM's "Players see …" line: a colored dot (green: a scene, amber: hidden) and the words. */
+export function playersSeeLine(ps = playersSee()) {
+  const words = ps.state === 'scene' ? ['Players see ', h('strong', null, ps.name)]
+    : ps.state === 'curtain' ? [h('strong', null, 'Hidden'), ' · players see the curtain']
+      : ['Players see ', h('strong', null, 'nothing yet')];
+  return h('span', { class: ['rg-seen', `is-${ps.state}`] }, h('span', { class: 'rg-seen-dot', 'aria-hidden': 'true' }), h('span', { class: 'rg-seen-text' }, words));
+}
+
 function creatureImgs(it) {
   if (it.media) return [it.media];
   if (it.img) return [it.img];
@@ -120,6 +137,8 @@ function waiting(title, text) {
     text ? h('p', { class: 'rg-curtain-text' }, text) : null)];
 }
 
+const curtain = () => waiting('The scene is being set', 'The DM will raise the curtain shortly.');
+
 /** Player-side tokens from public objects (the table room, or a projection in the DM's preview). */
 function publicTokens(get, list, sceneId, role) {
   const tokens = [];
@@ -158,7 +177,7 @@ function buildPlayer() {
   const sceneId = meta?.live || null;
   const scene = sceneId ? world.t(K.scene(sceneId)) : null;
   if (!meta) return { role: 'player', emptyContent: waiting('The ring is quiet', 'Waiting for the DM to set the table.') };
-  if (meta.blackout) return { role: 'player', emptyContent: waiting('The scene is being set', 'The DM will raise the curtain shortly.') };
+  if (meta.blackout) return { role: 'player', emptyContent: curtain() };
   if (!scene) return { role: 'player', emptyContent: waiting('No scene yet', 'When the DM shows a map, it appears here.') };
   const fog = sortShapes(world.tList(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
   const { tokens, marks } = publicTokens((k) => world.t(k), (p) => world.tList(p), sceneId, 'player');
@@ -170,9 +189,13 @@ function buildPlayer() {
   return v;
 }
 
+// The live scene shows exactly what the players see (the curtain while it is hidden); any other scene shows how it
+// will look once it is shown.
 function buildPreview() {
   const sceneId = dmViewingId();
   if (!sceneId) return { role: 'player', emptyContent: waiting('No scenes yet', 'Create a scene in the Scenes panel.') };
+  const dmeta = world.d('dmeta') || {};
+  if (dmeta.blackout && dmeta.live === sceneId) return { role: 'player', preview: true, emptyContent: curtain() };
   const dm = new Map(world.bus.entries('dm'));
   dm.set('dmeta', { ...(dm.get('dmeta') || {}), live: sceneId, blackout: false });
   const pub = project(dm);

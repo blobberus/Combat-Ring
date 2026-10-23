@@ -1,11 +1,11 @@
 // Scenes (DM): every prepared map. View one to edit it while the players keep seeing the live one; "Show" makes it
-// live. The curtain hides the board from the players without changing scenes.
+// live; "Hide" lowers the curtain over the live scene (players see the curtain) until a scene is shown again.
 import { h, clear, add } from '../../core/dom.js';
 import { icon, confirmDialog, toast } from '../../core/ui.js';
 import { world, undoGroup } from '../world.js';
 import { ui, setUi, clearSelection } from '../state.js';
 import { K, newId, keyTail } from '../model.js';
-import { dmScenes, dmViewingId } from '../view.js';
+import { dmScenes, dmViewingId, playersSee, playersSeeLine } from '../view.js';
 import * as A from '../actions.js';
 import { openSceneEditor } from '../editors/scene-editor.js';
 import { mediaUrl } from '../media.js';
@@ -55,30 +55,36 @@ export default {
   render(el) {
     clear(el);
     const scenes = dmScenes();
-    const dmeta = world.d('dmeta') || {};
+    const ps = playersSee();
     const viewing = dmViewingId();
     add(el, h('div', { class: 'row cr-panel-actions' },
-      h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => openSceneEditor() }, icon('plus'), 'New scene'),
-      h('span', { class: 'spacer' }),
-      h('button', { class: ['btn btn-sm', dmeta.blackout && 'is-active'], type: 'button', onclick: () => A.setBlackout(!dmeta.blackout) }, icon(dmeta.blackout ? 'eye' : 'eye-off'), dmeta.blackout ? 'Raise the curtain' : 'Curtain')));
+      h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => openSceneEditor() }, icon('plus'), 'New scene')));
+    if (scenes.length) {
+      add(el, h('div', { class: ['cr-seen', `is-${ps.state}`] }, playersSeeLine(ps), h('span', { class: 'spacer' }),
+        ps.state === 'scene' ? h('button', { class: 'btn btn-sm', type: 'button', title: 'Players see the curtain until you show a scene (Shift+H)', onclick: () => A.setBlackout(true) }, icon('eye-off'), 'Hide from players')
+          : ps.state === 'curtain' && ps.id ? h('button', { class: 'btn btn-primary btn-sm', type: 'button', title: `Show “${ps.name}” again (Shift+H)`, onclick: () => A.setBlackout(false) }, icon('eye'), 'Show it again') : null));
+    }
     if (!scenes.length) {
       add(el, h('div', { class: 'empty-state' }, icon('map'), h('p', null, 'A scene is a map on a grid: pick its size in squares, place and crop an image on it, then add creatures, props, fog and interactions.')));
       return;
     }
     const list = h('ul', { class: 'cr-scenes', role: 'list' });
     scenes.forEach((s, i) => {
-      const live = dmeta.live === s.id;
+      const live = ps.id === s.id;
+      const seen = live && ps.state === 'scene';
       const thumb = h('div', { class: 'cr-scene-thumb', style: { background: s.color || '' } });
       if (s.map?.media) mediaUrl(s.map.media).then((u) => { if (u) add(thumb, h('img', { src: u, alt: '', loading: 'lazy' })); }).catch(() => {});
       const nItems = world.dVals('item.').filter((it) => it.scene === s.id && it.kind === 'creature').length;
-      add(list, h('li', { class: ['cr-scene', viewing === s.id && 'is-viewing', live && 'is-live'] },
+      add(list, h('li', { class: ['cr-scene', viewing === s.id && 'is-viewing', seen ? 'is-live' : live && 'is-hidden-live'] },
         h('button', { class: 'cr-scene-open', type: 'button', title: 'View and edit this scene', onclick: () => { setUi({ viewing: s.id }); clearSelection(); } }, thumb,
           h('span', { class: 'cr-scene-text' },
             h('span', { class: 'cr-scene-name' }, s.name || 'Scene'),
             h('span', { class: 'cr-row-sub' }, `${s.cols} × ${s.rows} squares · ${nItems} creature${nItems === 1 ? '' : 's'}${s.light?.level && s.light.level !== 'bright' ? ` · ${s.light.level}` : ''}`)),
-          live ? h('span', { class: ['badge', dmeta.blackout ? 'badge-warn' : 'badge-ok'] }, dmeta.blackout ? 'Curtained' : 'Live') : viewing === s.id ? h('span', { class: 'badge' }, 'Viewing') : null),
+          live ? h('span', { class: ['badge', seen ? 'badge-ok' : 'badge-warn'], title: seen ? 'Players see this scene' : 'Live, but hidden: players see the curtain' }, seen ? 'Live' : 'Hidden') : viewing === s.id ? h('span', { class: 'badge' }, 'Viewing') : null),
         h('div', { class: 'cr-scene-actions' },
-          live && !dmeta.blackout ? null : h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { A.goLive(s.id); setUi({ viewing: s.id }); } }, icon('eye'), 'Show'),
+          seen
+            ? h('button', { class: 'btn btn-sm', type: 'button', title: 'Hide it: players see the curtain', onclick: () => A.setBlackout(true) }, icon('eye-off'), 'Hide')
+            : h('button', { class: 'btn btn-sm', type: 'button', title: 'Players see this scene now', onclick: () => { A.goLive(s.id); setUi({ viewing: s.id }); } }, icon('eye'), 'Show'),
           h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Edit the map', 'aria-label': 'Edit the map', onclick: () => openSceneEditor(s.id) }, icon('edit')),
           h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Duplicate', 'aria-label': 'Duplicate', onclick: () => duplicate(s) }, icon('copy')),
           h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: () => move(s, -1) }, icon('chevron-up')),
@@ -86,7 +92,7 @@ export default {
           h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Delete', 'aria-label': 'Delete', onclick: () => remove(s) }, icon('trash')))));
     });
     add(el, list);
-    add(el, h('p', { class: 'muted text-xs cr-foot' }, 'Players see only the live scene (unless the curtain is down). Viewing another scene lets you prepare it in secret.'));
+    add(el, h('p', { class: 'muted text-xs cr-foot' }, 'Players see only the live scene, or the curtain while it is hidden. Viewing another scene lets you prepare it in secret.'));
     void keyTail;
   },
 };

@@ -58,6 +58,9 @@ The DM's client turns the DM room into the table room's projected keys after eve
 fast path). Players get only: the live scene (none behind the curtain), active fog, items that are not hidden and not
 under fog, a creature's alias and only the stats the DM shows, triggered notices, visible creatures' initiative, the
 banner parts marked "Show", and the slideshow being presented. Everything else stays sealed in the DM room.
+A creature's initiative line carries no Dexterity: its `tie` is the rank of that score among the listed creatures
+(`tieRanks`), so players sort ties like the DM without learning the stat. A fast-path change that adds, removes or
+renumbers a line triggers the full projection so the ranks are recomputed.
 
 ## Images (`ring/media.js`)
 

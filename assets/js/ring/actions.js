@@ -399,7 +399,11 @@ export function goLive(sceneId) {
   toast('The players now see this scene.', { type: 'success' });
 }
 
-export function setBlackout(on) { patchDmeta({ blackout: !!on }, on ? 'curtain' : 'raise curtain'); }
+/** Hide the live scene from the players (they see the curtain), or show it to them again. */
+export function setBlackout(on) {
+  patchDmeta({ blackout: !!on }, on ? 'hide from players' : 'show to players');
+  toast(on ? 'Hidden: the players see the curtain.' : 'The players see the scene again.', { type: on ? 'info' : 'success' });
+}
 
 export function setBanner(fields) { patchDmeta({ banner: { ...(dmeta().banner || {}), ...fields } }, 'banner'); }
 
