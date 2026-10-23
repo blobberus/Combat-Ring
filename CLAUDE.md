@@ -42,8 +42,9 @@ creatures, props, slides, table = scene settings), `editors/` (scene/map, creatu
 `presence.js`, `dialogs.js`, `sandbox-seed.js`.
 
 ## Data flow
-- **Auth:** the gate opens Stone-Wardens' `vault.json` (`config.vaults`: own `vault.json`, `../Stone-Wardens/`, raw
-  GitHub) -> `{token, owner, repo}`; saved under SW's own key `sw:auth` (same origin = one login for both sites).
+- **Auth:** the gate opens Stone-Wardens' `vault.json` (`config.vaults`: `../Stone-Wardens/` on Pages, raw GitHub
+  locally; list an own vault first to give the ring its own token) -> `{token, owner, repo}`; saved under SW's own key
+  `sw:auth` (same origin = one login for both sites).
 - **Data repo** = Stone-Wardens (the token only covers it). Combat-Ring writes only under `content/combat-ring/`
   (SW's Pages workflow ignores `content/**`). It reads `content/characters/*.json`, `srd/species.json` +
   `srd/stubs/species.json` (+ `content/library/species/`) for speed/darkvision defaults, `content/locations/` names.

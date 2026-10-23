@@ -5,7 +5,6 @@
   "species": ["srd/species.json", "srd/stubs/species.json"],
   "customSpecies": "content/library/species/",
   "vaults": [
-    "vault.json",
     "../Stone-Wardens/vault.json",
     "https://raw.githubusercontent.com/blobberus/Stone-Wardens/main/vault.json"
   ],
