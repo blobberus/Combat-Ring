@@ -160,6 +160,10 @@ input.cr-ini-value { min-height: 32px; padding: 2px 6px; }
 /* ---------- Settings ------------------------------------------------------- */
 .cr-settings section + section { padding-top: var(--space-3); border-top: 1px solid var(--rule); }
 .cr-settings-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.cr-me-lock { display: flex; align-items: flex-start; gap: 6px; margin: 0; font: 400 var(--text-xs) / 1.4 var(--font-ui); color: var(--ink-muted); }
+.cr-me-lock .icon { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+.cr-lock-all { margin-top: calc(-1 * var(--space-2)); }
+.cr-row .btn-icon.is-open .icon { color: var(--ok); }
 .cr-settings-row > .field { flex: 1 1 200px; }
 .cr-keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font: 400 var(--text-sm) / 1.4 var(--font-ui); }
 .cr-keys dd { margin: 0; color: var(--ink-muted); }

@@ -2,8 +2,9 @@
 // interaction notes and placement. Each 'down' may return a drag session {move, up, cancel}.
 import { world, me } from './world.js';
 import { ui, setUi, select, toggleSelect, clearSelection, parseKey } from './state.js';
-import { simplify, pointInPolygon, rectPts, distanceFt, sizeCells, sortShapes, polygonArea, snapPoint } from './model.js';
+import { simplify, pointInPolygon, rectPts, distanceFt, sizeCells, sortShapes, polygonArea, snapPoint, cellPx } from './model.js';
 import { getSetting } from '../core/settings.js';
+import { toast } from '../core/ui.js';
 import * as A from './actions.js';
 
 const THROTTLE = 70;
@@ -34,6 +35,9 @@ function fogAt(pt) {
 }
 
 function sceneScale(board) { return board.scale || 1; }
+
+// the token menu steps aside while a token is dragged or measured from (it would cover the line)
+const dragging = (board, on) => board.root.closest('.rg-stage')?.classList.toggle('is-dragging', on);
 
 export function handleTool(type, { pt, e, target, board }) {
   if (!current?.scene && type === 'down') return 'pan';
@@ -67,6 +71,8 @@ function tokenDown(key, pt, e, board) {
   else if (!ui.selected.has(key)) select(key);
   const keys = [...ui.selected].filter((k) => A.canMove(k) && findToken(k));
   if (!keys.includes(key) || !A.canMove(key)) {
+    const t = findToken(key);
+    if (t?.kind === 'pc' && t.mine) return rangeTest(t, pt, board); // a locked own character: dragging measures
     return { up: () => hooks.openMenu(key) };
   }
   const start = { x: pt.x, y: pt.y };
@@ -97,6 +103,7 @@ function tokenDown(key, pt, e, board) {
       if (!moved && Math.hypot(p.x - start.x, p.y - start.y) * sceneScale(board) < 4) return;
       if (!moved) {
         moved = true;
+        dragging(board, true);
         for (const i of items) i.el?.classList.add('is-dragging');
         ui.dragFrom = lead && !lead.mark ? { key: lead.k, x: lead.x, y: lead.y } : null;
       }
@@ -118,6 +125,7 @@ function tokenDown(key, pt, e, board) {
     },
     up(p, ev) {
       board.setOverlay('drag', null);
+      dragging(board, false);
       ui.dragFrom = null;
       for (const i of items) i.el?.classList.remove('is-dragging');
       if (!moved) { hooks.openMenu(key); return; }
@@ -133,10 +141,36 @@ function tokenDown(key, pt, e, board) {
     },
     cancel() {
       board.setOverlay('drag', null);
+      dragging(board, false);
       ui.dragFrom = null;
       for (const i of items) i.el?.classList.remove('is-dragging');
       world.invalidate();
     },
+  };
+}
+
+// A player's token the DM keeps locked: dragging from it measures how far a move or a shot would reach (its range
+// circles show while it is selected); the token stays where it is.
+let lockedHint = false;
+function rangeTest(t, start, board) {
+  let moved = false;
+  return {
+    move(p) {
+      if (!moved && Math.hypot(p.x - start.x, p.y - start.y) * sceneScale(board) < 4) return;
+      if (!moved) dragging(board, true);
+      moved = true;
+      const q = getSetting('snap') ? snapPoint(p.x, p.y, sizeCells(t.w), current.scene) : p;
+      const ft = distanceFt({ x: t.x, y: t.y }, q, current.scene, getSetting('diagonals'));
+      const move = t.profile?.ranges?.find((r) => r.id === 'move')?.ft || t.profile?.speed || 0;
+      board.setOverlay('drag', { kind: 'line', x0: t.x, y0: t.y, x1: q.x, y1: q.y, label: move && ft > move ? `${ft} ft · past your ${move} ft move` : `${ft} ft` });
+    },
+    up() {
+      board.setOverlay('drag', null);
+      dragging(board, false);
+      if (!moved) { hooks.openMenu(t.key); return; }
+      if (!lockedHint) { lockedHint = true; toast('The DM moves your token while it is locked; dragging measures from it.', { timeout: 4000 }); }
+    },
+    cancel() { board.setOverlay('drag', null); dragging(board, false); },
   };
 }
 
@@ -200,16 +234,18 @@ function fogDown(pt, e, board) {
     if (id) shape === 'erase' ? A.deleteFog(id) : A.toggleFog(id);
     return null;
   }
+  // with Lasso or Rectangle, a drag draws and a click (no drag) on fog reveals it, or hides it again
+  const clicked = (p) => Math.hypot(p.x - pt.x, p.y - pt.y) * sceneScale(board) < 5;
+  const clickToggle = () => { const id = fogAt(pt); if (id) A.toggleFog(id); };
   if (shape === 'rect') {
     return {
-      move(p) { board.setOverlay('fog', { kind: 'box', x0: pt.x, y0: pt.y, x1: p.x, y1: p.y, mode }); },
+      move(p) { if (!clicked(p)) board.setOverlay('fog', { kind: 'box', x0: pt.x, y0: pt.y, x1: p.x, y1: p.y, mode }); },
       up(p) {
         board.setOverlay('fog', null);
-        const s = A.snapBox; // rectangles snap to grid lines when snapping is on
-        const c = current.scene.grid?.size || 100;
+        if (clicked(p)) { clickToggle(); return; }
+        const c = cellPx(current.scene); // rectangles snap to grid lines when snapping is on
         const sn = (v) => (getSetting('snap') && !e.altKey ? Math.round(v / c) * c : Math.round(v));
         const x0 = sn(Math.min(pt.x, p.x)), x1 = sn(Math.max(pt.x, p.x)), y0 = sn(Math.min(pt.y, p.y)), y1 = sn(Math.max(pt.y, p.y));
-        void s;
         if (x1 - x0 > 2 && y1 - y0 > 2) A.addFog(rectPts(x0, y0, x1, y1), mode);
       },
       cancel() { board.setOverlay('fog', null); },
@@ -225,8 +261,10 @@ function fogDown(pt, e, board) {
   }
   // lasso
   const pts = [Math.round(pt.x), Math.round(pt.y)];
+  let far = 0;
   return {
     move(p) {
+      far = Math.max(far, Math.hypot(p.x - pt.x, p.y - pt.y) * sceneScale(board));
       const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
       if (Math.hypot(p.x - lx, p.y - ly) * sceneScale(board) < 3) return;
       pts.push(Math.round(p.x), Math.round(p.y));
@@ -234,6 +272,7 @@ function fogDown(pt, e, board) {
     },
     up() {
       board.setOverlay('fog', null);
+      if (far < 5) { clickToggle(); return; }
       const s = simplify(pts, 1.2 / sceneScale(board));
       if (s.length >= 6 && polygonArea(s) * sceneScale(board) ** 2 > 60) A.addFog(s, mode);
     },
@@ -258,7 +297,7 @@ function hover(pt, target, board) {
     hooks.ghost?.(pt);
     return null;
   }
-  if (ui.tool === 'fog' && world.dm && (ui.fogShape === 'erase' || ui.fogShape === 'toggle')) {
+  if (ui.tool === 'fog' && world.dm && !poly && !getSetting('dmPreview')) { // the fog a click would reveal / hide / erase
     const id = fogAt(pt);
     if (id !== ui.fogSel) { setUi({ fogSel: id }); world.invalidate(); }
   } else if (ui.fogSel) { setUi({ fogSel: null }); world.invalidate(); }

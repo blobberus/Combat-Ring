@@ -37,7 +37,7 @@ Table room (players read; `world.t`):
 
 | Key | Written by | What |
 |---|---|---|
-| `meta` | projector | `{live, blackout, banner: {location?, time?}}` (only what the DM shows) |
+| `meta` | projector | `{live, blackout, unlocked: [charId], banner: {location?, time?}}` (only what the DM shows; `unlocked`: characters whose players may move their token on the live scene) |
 | `scene.<id>` | projector | the live scene: size, grid, light, map image reference, `fogOn` |
 | `fog.<scene>.<shape>` | projector | active fog shapes `{pts, mode: hide|reveal, z}` |
 | `it.<item>` | projector | what players see of a creature / prop / triggered notice (name = alias, health or stats if shown) |
@@ -48,8 +48,8 @@ Table room (players read; `world.t`):
 | `pin.<id>` | anyone | `{scene, x, y, text, color, by, resolved}` |
 | `ini.pc-<char>`, `ini.x-<id>` | player / DM | PC initiative, DM extras (lair actions) |
 
-DM room (`world.d`): `dmeta` (live scene, banner with show flags, curtain, turn, presenting), `scene.<id>` (all
-scenes), `fog.<scene>.<shape>` (with `on`), `item.<id>` (creatures, props, notes; with `hidden`, stats, HP),
+DM room (`world.d`): `dmeta` (live scene, banner with show flags, curtain, turn, presenting, `unlocked[scene][char]`),
+`scene.<id>` (all scenes; `fogColor` black / white), `fog.<scene>.<shape>` (with `on`), `item.<id>` (creatures, props, notes; with `hidden`, stats, HP),
 `cre.<id>` (custom creatures), `cprop.<id>` (custom props), `media.<id>` (image registry), `deck.<id>` (slideshows).
 
 ## The projection (`ring/model.js` `project`, `ring/projector.js`)

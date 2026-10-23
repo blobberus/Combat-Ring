@@ -16,9 +16,11 @@ const DEFAULTS = {
   diagonals: 'five', // 'five' (2024: every square 5 ft) | 'alternate' (5-10-5) | 'euclid'
   panelOpen: true,
   panelTab: 'party',
+  iniMini: false, // during combat, a small "whose turn, who's next" card instead of the Initiative panel
   reduceMotion: false,
   placeHidden: true, // DM: creatures placed on a scene start hidden from players
   dmPreview: false, // DM: show the board as the players see it
+  fogPanelMin: false, // DM: the fog controls folded to their title
 };
 
 let cache = null;

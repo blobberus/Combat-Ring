@@ -34,11 +34,35 @@ export function snapBox(x, y, w, hh, e) {
 // ---------- moving ----------
 
 /** Can this device drag the thing behind a view key? */
+/**
+ * A character's token is locked by default: only the DM places, moves, resizes or removes it, until the DM unlocks
+ * it for its player on that scene (dmeta.unlocked[scene][charId], projected as meta.unlocked for the live scene).
+ */
+export function pcUnlocked(charId, sceneId = currentSceneId()) {
+  if (!sceneId) return false;
+  if (world.dm) return !!world.d('dmeta')?.unlocked?.[sceneId]?.[charId];
+  const meta = world.t('meta');
+  return meta?.live === sceneId && (meta.unlocked || []).includes(charId);
+}
+
+/** May this device move / place / remove this character's token? */
+export const canHandlePc = (charId, sceneId = currentSceneId()) => (world.dm && !getSetting('dmPreview')) || (me.owns(charId) && pcUnlocked(charId, sceneId));
+
+/** DM: lock or unlock characters' tokens for their players (on the scene in view). */
+export function setPcLocked(charIds, locked, sceneId = dmViewingId()) {
+  if (!world.dm || !sceneId) return;
+  const all = { ...(dmeta().unlocked || {}) };
+  const here = { ...(all[sceneId] || {}) };
+  for (const id of [].concat(charIds)) { if (locked) delete here[id]; else here[id] = true; }
+  all[sceneId] = here;
+  patchDmeta({ unlocked: all }, locked ? 'lock' : 'unlock');
+}
+
 export function canMove(vk) {
   const { room, key } = parseKey(vk);
   if (world.dm && !getSetting('dmPreview')) return true;
   if (room === 'dm') return false;
-  if (key.startsWith('pct.')) return me.owns(key.split('.').slice(2).join('.'));
+  if (key.startsWith('pct.')) return canHandlePc(key.split('.').slice(2).join('.'), key.split('.')[1]);
   if (key.startsWith('it.')) return !!world.t(key)?.movable;
   if (key.startsWith('pin.')) return mineOrDm(world.t(key));
   return false;
@@ -142,7 +166,7 @@ export function placeNote(x, y) {
 /** Put a PC on a scene (the player places their own; the DM places anyone). */
 export function placePc(charId, x, y, sceneId = currentSceneId()) {
   if (!sceneId) return null;
-  if (!world.dm && !me.owns(charId)) return null;
+  if (!world.dm && !canHandlePc(charId, sceneId)) return null;
   const p = pcProfile(charId);
   const pt = maybeSnap(x, y, sizeCells(p?.size || 'medium'));
   const key = K.pct(sceneId, charId);
@@ -173,7 +197,7 @@ export function deleteKeys(vks) {
       const { room, key } = parseKey(vk);
       if (room === 'dm') { if (world.dm) world.del('dm', key, dmUndo); continue; }
       if (key.startsWith('pin.')) { if (mineOrDm(world.t(key))) world.del('table', key, world.dm ? dmUndo : {}); continue; }
-      if (key.startsWith('pct.')) { if (world.dm || me.owns(key.split('.').slice(2).join('.'))) world.del('table', key, world.dm ? dmUndo : {}); continue; }
+      if (key.startsWith('pct.')) { if (world.dm || canHandlePc(key.split('.').slice(2).join('.'), key.split('.')[1])) world.del('table', key, world.dm ? dmUndo : {}); continue; }
       if (key.startsWith('it.') && world.dm) world.del('dm', K.item(keyTail(key)), dmUndo);
     }
   });
@@ -232,13 +256,24 @@ export function addFog(pts, mode = ui.fogMode) {
 
 export function fogShapeKey(id) { return K.fog(dmViewingId(), id); }
 
+/** Click to reveal: a fog area stops (or starts again) hiding what is under it. */
 export function toggleFog(id) {
   const key = fogShapeKey(id);
   const f = world.d(key);
-  if (f) world.dPut(key, { ...f, on: f.on === false }, { undo: true, label: 'fog' });
+  if (!f) return;
+  const on = f.on === false;
+  world.dPut(key, { ...f, on }, { undo: true, label: on ? 'hide fog area' : 'reveal fog area' });
+  if (f.mode !== 'reveal') toast(on ? 'Fog back: the players can’t see this area.' : 'Revealed to the players.', { timeout: 1600 });
 }
 
 export function deleteFog(id) { world.del('dm', fogShapeKey(id), dmUndo); }
+
+/** Black or white fog, per scene. */
+export function setFogColor(color) {
+  const sceneId = dmViewingId();
+  const s = sceneOf(sceneId);
+  if (s) world.dPut(K.scene(sceneId), { ...s, fogColor: color === 'white' ? 'white' : 'black' }, { undo: true, label: 'fog color' });
+}
 
 export function coverAll() {
   const sceneId = dmViewingId();

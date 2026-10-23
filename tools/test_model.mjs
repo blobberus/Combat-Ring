@@ -151,6 +151,16 @@ test('slideshow projection', () => {
   assert.equal(show.slides[1].img.url, 'https://x/y.gif');
 });
 
+test('characters are locked unless the DM unlocks them on the live scene', () => {
+  const dm = new Map([
+    ['dmeta', { live: 's1', unlocked: { s1: { ana: true, bo: false }, s2: { cy: true } } }],
+    ['scene.s1', { id: 's1', name: 'Yard', cols: 10, rows: 10, grid: { size: 100, ft: 5 } }],
+  ]);
+  assert.deepEqual(M.project(dm).get('meta').unlocked, ['ana']);
+  dm.set('dmeta', { live: 's1' });
+  assert.deepEqual(M.project(dm).get('meta').unlocked, []);
+});
+
 test('slide titles and descriptions the DM keeps back', () => {
   const dm = new Map([
     ['dmeta', { presenting: { deck: 'd1', index: 0 } }],

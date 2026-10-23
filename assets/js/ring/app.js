@@ -5,7 +5,7 @@ import { icon, toast, segmented } from '../core/ui.js';
 import { getSetting, setSetting, onSetting } from '../core/settings.js';
 import { config } from '../core/auth.js';
 import { world, me } from './world.js';
-import { ui, setUi, onUi, clearSelection, parseKey } from './state.js';
+import { ui, setUi, onUi, clearSelection, parseKey, select } from './state.js';
 import { createBoard, isTyping } from './board.js';
 import { buildView, dmScenes, dmViewingId, previewing, playersSee, playersSeeLine } from './view.js';
 import { handleTool, setToolHooks, setCurrentView, finishPoly, cancelPoly, polyActive, ping } from './tools.js';
@@ -18,7 +18,7 @@ import { createSlideshow } from './slideshow.js';
 import { dmLoginDialog, dmMenu, settingsDialog, identityDialog } from './dialogs.js';
 import { saveNow, onSaveState, saveState } from './persist.js';
 import { party } from './characters.js';
-import { cellPx, K } from './model.js';
+import { cellPx, K, nextTurn } from './model.js';
 import { mediaUrl } from './media.js';
 import { repo } from '../core/repo.js';
 
@@ -68,8 +68,9 @@ export function mountRing(app, { sandbox = false } = {}) {
   const dmbar = h('div', { class: 'rg-dmbar rg-float', hidden: true });
   const placingBar = h('div', { class: 'rg-placing rg-float', hidden: true });
   const banner = h('div', { class: 'rg-banner rg-float', hidden: true });
+  const turnCard = h('div', { class: 'rg-turn rg-float', hidden: true, role: 'status', 'aria-live': 'polite' });
   const tipEl = h('div', { class: 'rg-tip', hidden: true });
-  add(stage, top, banner, topright, toolsEl, sub, zoom, dmbar, placingBar);
+  add(stage, top, banner, turnCard, topright, toolsEl, sub, zoom, dmbar, placingBar);
   add(document.body, tipEl);
 
   const show = createSlideshow(stage);
@@ -78,13 +79,17 @@ export function mountRing(app, { sandbox = false } = {}) {
 
   // ---------- rendering ----------
   let view = null;
+  let fogPanelSig = '';
   function render() {
     view = buildView();
     setCurrentView(view);
+    const fps = `${view.sceneId}|${view.scene?.fogColor}`; // the fog controls show the viewed scene's fog color
+    if (fps !== fogPanelSig) { fogPanelSig = fps; if (!sub.hidden) drawSub(world.dm && !previewing()); }
     board.render(view);
     board.root.classList.toggle('is-placing', !!ui.placing);
     renderTop();
     renderBanner();
+    renderTurn();
     renderDmBar();
     renderPlacing();
     refreshMenu(view);
@@ -99,6 +104,7 @@ export function mountRing(app, { sandbox = false } = {}) {
   onSetting((k) => {
     if (k === 'dmPreview') { clearSelection(); closeMenu(); drawTools(); } // no DM menu or DM tools in the player view
     if (['names', 'hpBars', 'hpPos', 'hpSize', 'hpColor'].includes(k)) render();
+    if (['iniMini', 'panelOpen', 'panelTab'].includes(k)) renderTurn();
     if (['names', 'dmPreview', 'snap', 'diagonals', 'playerName', 'chars'].includes(k)) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
     if (k === 'reduceMotion') app.classList.toggle('reduce-motion', !!getSetting('reduceMotion'));
     if (k === 'playerName' || k === 'chars') { world.setName(me.name()); announce(); }
@@ -162,6 +168,42 @@ export function mountRing(app, { sandbox = false } = {}) {
 
   // Left: what the players see (always the truth). Then only verbs: "Show this scene" when the scene on the board
   // isn't what they see, "Hide from players" while they see one. Right: DM view / Player view.
+  // The minimized initiative: whose turn it is and who is next, while combat runs and the Initiative panel is folded
+  // away. Players' "next" skips creatures they can't see.
+  function renderTurn() {
+    const dm = world.dm && !previewing();
+    const turn = dm ? world.d('dmeta')?.turn : world.t('turn');
+    const onPanel = panel.isOpen() && panel.activeId() === 'initiative';
+    if (!getSetting('iniMini') || !turn?.active || onPanel) { turnCard.hidden = true; return; }
+    const order = A.initiativeEntries({ forDm: dm }).filter((e) => e.value != null && e.value !== '');
+    const name = (e) => (e?.charId ? party.get(e.charId)?.name || e.name : e?.name) || '—';
+    const side = (e) => (e.charId ? 'pc' : e.src === 'x' ? 'x' : e.disp || 'enemy');
+    const cur = order.find((e) => e.id === turn.current) || null;
+    const nextId = cur ? nextTurn(order, cur.id, turn.round || 1).current : null;
+    const next = nextId && nextId !== cur?.id ? order.find((e) => e.id === nextId) : null;
+    const mine = cur?.charId && me.owns(cur.charId);
+    turnCard.hidden = false;
+    turnCard.classList.toggle('is-mine', !!mine);
+    turnCard.style.top = banner.hidden ? '' : `${banner.offsetTop + banner.offsetHeight + 8}px`;
+    mount(turnCard,
+      h('span', { class: 'rg-turn-round' }, `Round ${turn.round || 1}`),
+      h('button', { class: 'rg-turn-now', type: 'button', title: cur ? 'Find it on the board' : '', disabled: !cur, onclick: () => cur && focusEntry(cur) },
+        cur ? [h('span', { class: ['rg-turn-dot', `d-${side(cur)}`], 'aria-hidden': 'true' }), h('span', { class: 'truncate' }, mine ? 'Your turn' : name(cur))]
+          : h('span', { class: 'muted' }, turn.current === 'hidden' ? 'Something unseen acts…' : 'Waiting…')),
+      next ? h('span', { class: 'rg-turn-next' }, 'Next: ', h('span', { class: ['rg-turn-dot', `d-${side(next)}`], 'aria-hidden': 'true' }), h('span', { class: 'truncate' }, next.charId && me.owns(next.charId) ? 'you' : name(next))) : null,
+      dm ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Previous turn', 'aria-label': 'Previous turn', onclick: () => A.advanceTurn(-1) }, icon('chevron-left')) : null,
+      dm ? h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => A.advanceTurn(1) }, 'Next', icon('chevron-right')) : null,
+      h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Show the whole initiative list', 'aria-label': 'Expand the initiative list', onclick: () => { setSetting('iniMini', false); panel.open('initiative'); } }, icon('sidebar-right')));
+  }
+
+  function focusEntry(e) {
+    const sceneId = A.currentSceneId();
+    const dm = world.dm && !previewing();
+    const key = e.charId ? `t:${K.pct(sceneId, e.charId)}` : e.src === 'dm' ? (dm ? `d:${K.item(e.item)}` : `t:${K.pub(e.item)}`) : null;
+    const pos = e.charId ? world.t(K.pct(sceneId, e.charId)) : e.src === 'dm' ? (dm ? world.d(K.item(e.item)) : world.t(K.pub(e.item))) : null;
+    if (key && pos) { board.centerOn(pos.x, pos.y); select(key); }
+  }
+
   function renderDmBar() {
     if (!world.dm) { dmbar.hidden = true; return; }
     const vid = dmViewingId();
@@ -244,19 +286,34 @@ export function mountRing(app, { sandbox = false } = {}) {
     clear(sub);
     const shapes = [
       ['lasso', 'Lasso', 'lasso'], ['poly', 'Polygon', 'polygon'], ['rect', 'Rectangle', 'square'],
-      ['toggle', 'Show / hide a shape', 'eye'], ['erase', 'Erase a shape', 'trash'],
+      ['toggle', 'Click to reveal / hide', 'eye'], ['erase', 'Erase an area', 'trash'],
     ];
-    add(sub, h('div', { class: 'rg-subtools-title' }, 'Fog of war'));
-    const seg = h('div', { class: 'seg' },
-      ...[['hide', 'Hide'], ['reveal', 'Reveal']].map(([m, l]) => h('button', { class: ['seg-btn', ui.fogMode === m && 'is-active'], type: 'button', onclick: () => setUi({ fogMode: m }) }, l)));
-    add(sub, seg);
-    for (const [id, label, ic] of shapes) add(sub, h('button', { class: ['rg-sub-btn', ui.fogShape === id && 'is-active'], type: 'button', onclick: () => setUi({ fogShape: id }) }, icon(ic), label));
+    const min = !!getSetting('fogPanelMin');
+    const cur = shapes.find(([id]) => id === ui.fogShape) || shapes[0];
+    sub.classList.toggle('is-min', min);
+    add(sub, h('div', { class: 'rg-subtools-head' },
+      h('span', { class: 'rg-subtools-title' }, 'Fog of war'),
+      min ? h('span', { class: 'rg-subtools-cur' }, icon(cur[2]), cur[1]) : null,
+      h('button', { class: 'btn-icon btn-sm', type: 'button', title: min ? 'Show the fog controls' : 'Minimize the fog controls (the tool stays on)', 'aria-label': min ? 'Expand' : 'Minimize', 'aria-expanded': String(!min), onclick: () => { setSetting('fogPanelMin', !min); drawSub(dm); } }, icon(min ? 'chevron-right' : 'chevron-left'))));
+    if (min) return;
+    const draws = ui.fogShape === 'lasso' || ui.fogShape === 'poly' || ui.fogShape === 'rect';
+    add(sub, h('div', { class: 'seg', role: 'group', 'aria-label': 'What a drawing makes' },
+      ...[['hide', 'Fog'], ['reveal', 'Clearing']].map(([m, l]) => h('button', {
+        class: ['seg-btn', ui.fogMode === m && 'is-active'], type: 'button', 'aria-pressed': String(ui.fogMode === m),
+        title: m === 'hide' ? 'Draw fog that hides what is under it' : 'Draw a clear hole inside fog', onclick: () => setUi({ fogMode: m }),
+      }, l))));
+    for (const [id, label, ic] of shapes) add(sub, h('button', { class: ['rg-sub-btn', ui.fogShape === id && 'is-active'], type: 'button', 'aria-pressed': String(ui.fogShape === id), onclick: () => setUi({ fogShape: id }) }, icon(ic), label));
+    const scene = view?.scene;
+    add(sub, h('div', { class: 'rg-sub-row' }, h('span', { class: 'rg-sub-label' }, 'Players see'),
+      segmented([{ value: 'black', label: 'Black fog' }, { value: 'white', label: 'White fog' }], scene?.fogColor === 'white' ? 'white' : 'black', (v) => A.setFogColor(v))));
     add(sub, h('hr', { class: 'divider' }),
       h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.coverAll() }, icon('layers'), 'Cover the whole map'),
-      h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.setFogOn(false) }, icon('eye'), 'Lift all fog'),
-      h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.setFogOn(true) }, icon('eye-off'), 'Restore all fog'),
+      h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.setFogOn(false) }, icon('eye'), 'Reveal all fog'),
+      h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.setFogOn(true) }, icon('eye-off'), 'Hide it all again'),
       h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.clearFog() }, icon('trash'), 'Delete all fog'),
-      h('p', { class: 'rg-sub-hint' }, ui.fogShape === 'poly' ? 'Click points; click the first one, double-click or press Enter to close.' : 'Hold Alt to draw the other mode. Fog hides creatures and props beneath it from the players.'));
+      h('p', { class: 'rg-sub-hint' }, ui.fogShape === 'poly' ? 'Click points; click the first one, double-click or press Enter to close. Click a fog area with Lasso or Rectangle to reveal it.'
+        : draws ? 'Drag to draw. Click a fog area to reveal it to the players, click again to hide it. Alt draws the other kind.'
+          : ui.fogShape === 'toggle' ? 'Click a fog area to reveal it to the players; click again to hide it.' : 'Click an area to delete it.'));
   }
 
   function zoomLabel() { const z = zoom?.querySelector('.rg-zoom-level'); if (z) z.textContent = `${Math.round(board.scale * 100)}%`; }

@@ -73,11 +73,15 @@
 .rg-dark-fill { fill: var(--dark); }
 .rg-fog-fill { fill: var(--fog); }
 .rg-board.is-dm .rg-fog-fill { fill: var(--fog-dm); }
+.rg-board.is-dm .rg-fog[data-color="white"] .rg-fog-fill { fill: rgb(236 232 222 / 0.62); }
+.rg-fog-soft { pointer-events: none; }
 .rg-fog-edge { fill: none; stroke-width: 1.5; stroke-dasharray: 6 4; }
 .rg-fog-edge.is-hide { stroke: var(--gold); }
 .rg-fog-edge.is-reveal { stroke: var(--link); }
 .rg-fog-edge.is-off { stroke: var(--ink-faint); stroke-dasharray: 2 4; opacity: 0.7; }
-.rg-fog-edge.is-sel { stroke: var(--danger); stroke-width: 3; stroke-dasharray: none; fill: color-mix(in srgb, var(--danger) 16%, transparent); }
+/* the area a click would reveal / hide (or erase) */
+.rg-fog-edge.is-sel { stroke: var(--gold); stroke-width: 3; stroke-dasharray: none; fill: color-mix(in srgb, var(--gold) 14%, transparent); }
+.rg-fog-edge.is-sel.is-erase { stroke: var(--danger); fill: color-mix(in srgb, var(--danger) 16%, transparent); }
 .rg-board[data-tool="fog"] .rg-fog-edge { opacity: 1; }
 
 /* ---------- Tokens --------------------------------------------------------- */
@@ -311,7 +315,15 @@
   left: calc(var(--space-3) + 60px); top: 50%; transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 2px; padding: 6px; width: 196px;
 }
-.rg-subtools-title { padding: 2px 6px 6px; font: 700 var(--text-sm) / 1.2 var(--font-body); color: var(--ink); }
+.rg-subtools-head { display: flex; align-items: center; gap: 6px; padding: 0 0 4px 6px; }
+.rg-subtools-title { flex: 1; font: 700 var(--text-sm) / 1.2 var(--font-body); color: var(--ink); }
+.rg-subtools.is-min { width: auto; }
+.rg-subtools.is-min .rg-subtools-head { padding: 0 0 0 6px; }
+.rg-subtools-cur { display: inline-flex; align-items: center; gap: 4px; font: 400 var(--text-xs) / 1 var(--font-ui); color: var(--ink-muted); white-space: nowrap; }
+.rg-subtools-cur .icon { width: 14px; height: 14px; }
+.rg-sub-row { display: flex; flex-direction: column; gap: 4px; padding: 6px 6px 2px; }
+.rg-sub-label { font: 500 var(--text-xs) / 1.2 var(--font-ui); color: var(--ink-muted); }
+.rg-sub-row .seg-btn { height: 26px; font-size: var(--text-xs); }
 .rg-subtools .seg { margin: 2px 0 6px; }
 .rg-sub-btn {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px;
@@ -374,6 +386,27 @@
 .rg-banner.is-dm-only { border-style: dashed; border-color: var(--gold); opacity: 0.9; }
 .rg-banner-note { font: 400 var(--text-xs) / 1.2 var(--font-ui); color: var(--ink-muted); font-style: normal; }
 
+/* ---------- Minimized initiative: whose turn, who is next ------------------- */
+.rg-turn {
+  left: 50%; top: calc(var(--space-3) + 54px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: var(--space-2); max-width: min(520px, calc(100% - 24px));
+  padding: 4px 4px 4px 12px; font: 400 var(--text-sm) / 1.2 var(--font-ui);
+}
+.rg-turn.is-mine { border-color: var(--gold); box-shadow: var(--shadow), 0 0 0 2px color-mix(in srgb, var(--gold) 35%, transparent); }
+.rg-turn-round { flex: none; font: 600 var(--text-xs) / 1 var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-muted); }
+.rg-turn-now {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0; padding: 4px 8px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink); font: 700 var(--text-md) / 1.2 var(--font-body);
+}
+.rg-turn-now:not(:disabled):hover { background: var(--surface-2); }
+.rg-turn-next { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding-right: 4px; font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; }
+.rg-turn-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--disp-enemy); }
+.rg-turn-dot.d-pc { background: var(--pin-lapis); }
+.rg-turn-dot.d-ally { background: var(--disp-ally); }
+.rg-turn-dot.d-neutral { background: var(--disp-neutral); }
+.rg-turn-dot.d-x { background: var(--gold); }
+.rg-turn-next .rg-turn-dot { width: 7px; height: 7px; }
+
 /* ---------- Tooltip -------------------------------------------------------- */
 .rg-tip {
   position: fixed; z-index: var(--z-popover); pointer-events: none;
@@ -412,6 +445,12 @@
 .rg-hp-sep { padding-bottom: 6px; color: var(--ink-muted); }
 .rg-hp-quick { display: flex; gap: 4px; }
 .rg-hp-quick .input { width: 70px; }
+.rg-stage.is-dragging .rg-menu { opacity: 0; pointer-events: none; transition: opacity 120ms; }
+.rg-menu-lock { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: 6px 8px; border-radius: var(--radius); background: var(--surface-2); }
+.rg-lock-state { flex: 1; display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 500 var(--text-sm) / 1.3 var(--font-ui); color: var(--ink); }
+.rg-lock-state .icon { width: 16px; height: 16px; color: var(--ink-muted); }
+.rg-lock-state.is-open .icon { color: var(--ok); }
+.rg-menu-meta .icon { width: 14px; height: 14px; vertical-align: -2px; }
 .rg-size { gap: 6px; }
 .rg-size .select { flex: 1 1 auto; min-width: 0; }
 .rg-size .input-number { width: 76px; flex: none; }

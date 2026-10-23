@@ -320,12 +320,23 @@ function pcMenu(key, dm) {
   const prefs = world.t(K.pc(charId)) || {};
   const setPrefs = (fields) => world.tPut(K.pc(charId), { ...(world.t(K.pc(charId)) || {}), ...fields }); // fresh: see hpBlock
   const ini = world.t(K.ini(`pc-${charId}`));
+  const scene = parts[1];
+  const unlocked = A.pcUnlocked(charId, scene);
+  const handles = A.canHandlePc(charId, scene); // place, move, resize, take off: the DM, or its player once unlocked
+  const who = pr.owner || 'its player';
   const out = [head(pr.img, pr.name, [pr.owner && `Played by ${pr.owner}`, `Speed ${pr.speed} ft`, pr.darkvision ? `Darkvision ${pr.darkvision} ft` : null].filter(Boolean).join(' · '))];
+  if (dm) {
+    out.push(h('div', { class: 'rg-menu-lock' },
+      h('span', { class: ['rg-lock-state', unlocked && 'is-open'] }, icon(unlocked ? 'unlock' : 'lock'), unlocked ? `${who} can move it` : 'Locked: only you move it'),
+      h('button', { class: 'btn btn-sm', type: 'button', title: unlocked ? 'Only you will be able to move it' : `Let ${who} move it on this scene`, onclick: () => A.setPcLocked(charId, unlocked, scene) }, icon(unlocked ? 'lock' : 'unlock'), unlocked ? 'Lock' : `Unlock for ${who}`)));
+  } else if (mine && !unlocked) {
+    out.push(h('p', { class: 'rg-menu-meta' }, icon('lock'), ' Locked by the DM. Drag your token to measure a move or a shot; it stays put.'));
+  }
   if (canEdit) {
     out.push(...hpBlock(() => world.t(K.pc(charId))?.hp, (hp) => setPrefs({ hp: hp.max || hp.cur ? hp : null })));
     out.push(h('div', { class: 'rg-menu-row' },
       field('Initiative', h('input', { class: 'input input-number', type: 'number', value: ini?.value ?? '', placeholder: '—', onchange: (e) => A.setPcInit(charId, e.target.value === '' ? null : Number(e.target.value)) })),
-      field('Size', sizeControl(pr.size, (v) => setPrefs({ size: v })))));
+      handles ? field('Size', sizeControl(pr.size, (v) => setPrefs({ size: v }))) : null));
     out.push(field('Ranges', h('div', { class: 'rg-conds' }, pr.ranges.map((r, i) => h('button', {
       class: ['chip', r.on && 'is-active'], type: 'button',
       onclick: () => { const base = prefs.ranges || [{ id: 'move', label: 'Move', ft: null, on: true }]; setPrefs({ ranges: base.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) }); },
@@ -340,7 +351,7 @@ function pcMenu(key, dm) {
   out.push(h('div', { class: 'rg-menu-actions' },
     canEdit ? act('edit', 'Customize…', () => openPcEditor(charId)) : null,
     h('span', { class: 'spacer' }),
-    canEdit ? iconAct('trash', 'Take off the map', () => A.deleteKeys([currentKey])) : null));
+    handles ? iconAct('trash', 'Take off the map', () => A.deleteKeys([currentKey])) : null));
   return out;
 }
 

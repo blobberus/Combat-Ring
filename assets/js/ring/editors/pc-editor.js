@@ -9,6 +9,7 @@ import { K, safeKeyPart } from '../model.js';
 import { uploadPlain, mediaUrl } from '../media.js';
 import { cropDialog } from './crop.js';
 import { lightSelect, sizeControl, hpBlock } from '../menu.js';
+import { canHandlePc } from '../actions.js';
 
 const COLORS = ['#8e1b1b', '#a8321c', '#22507c', '#23675f', '#3b6b2a', '#82600f', '#8f6a14', '#6e3a5c', '#465266', '#5c4a36', '#1f1a14'];
 const PRESETS = [
@@ -42,8 +43,10 @@ export function openPcEditor(charId) {
     add(body, h('section', { class: 'cr-pc-sec' },
       field('Token ring', h('div', { class: 'rg-swatches' }, ...COLORS.map((col) => h('button', { class: ['rg-swatch', p.accent === col && 'is-active'], type: 'button', style: { background: col }, 'aria-label': col, onclick: () => { set({ color: col }); draw(); } })),
         h('input', { type: 'color', class: 'rg-color', value: p.accent || '#22507c', 'aria-label': 'Custom color', oninput: (e) => later(() => set({ color: e.target.value })) }))),
-      field('Size', sizeControl(p.size, (v) => { set({ size: v }); draw(); }),
-        `From the sheet: ${c?.size || 'medium'}. Small and Medium both fill one 5-ft square; Custom draws the token any number of squares across (0.8, 1.5…).`)));
+      canHandlePc(charId)
+        ? field('Size', sizeControl(p.size, (v) => { set({ size: v }); draw(); }),
+          `From the sheet: ${c?.size || 'medium'}. Small and Medium both fill one 5-ft square; Custom draws the token any number of squares across (0.8, 1.5…).`)
+        : field('Size', h('p', { class: 'muted text-sm' }, `${typeof p.size === 'number' ? `${p.size} squares` : p.size}. The DM sets it while your token is locked.`))));
     // --- hit points ---
     add(body, h('section', { class: 'cr-pc-sec' },
       h('h3', { class: 'cr-pc-h' }, 'Hit points and health bar'),

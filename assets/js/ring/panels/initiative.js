@@ -9,18 +9,21 @@ import { select } from '../state.js';
 import * as A from '../actions.js';
 import { hasChanges } from './index.js';
 import { previewing } from '../view.js';
+import { setSetting } from '../../core/settings.js';
 
 export default {
   id: 'initiative',
   title: 'Initiative',
   icon: 'd20',
   relevant: (c) => hasChanges(c, ['ini.', 'turn', 'item.', 'dmeta', 'pct.', 'it.']),
-  render(el, { board }) {
+  render(el, { board, panel }) {
     clear(el);
     const dm = world.dm && !previewing();
     const order = A.initiativeEntries({ forDm: dm });
     const turn = dm ? world.d('dmeta')?.turn || {} : world.t('turn') || {};
     const current = turn.active ? turn.current : null;
+    // fold the list into a small "whose turn / who's next" card on the board
+    const minimize = turn.active ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Minimize: show only whose turn it is and who is next', 'aria-label': 'Minimize the initiative list', onclick: () => { panel?.close(); setSetting('iniMini', true); } }, icon('collapse')) : null;
 
     if (dm) {
       add(el, h('div', { class: 'cr-turnbar' },
@@ -33,10 +36,12 @@ export default {
         h('span', { class: 'spacer' }),
         h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Roll for creatures without a number', 'aria-label': 'Roll for creatures', onclick: () => A.rollCreatureInit() }, icon('d20')),
         h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Add an entry (lair action, event…)', 'aria-label': 'Add an entry', onclick: async () => { const n = await promptDialog('Add to initiative', { label: 'Name', value: 'Lair action' }); if (n) A.addInitExtra(n, 20); } }, icon('plus')),
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Clear initiative', 'aria-label': 'Clear initiative', onclick: async () => { if (await confirmDialog('Clear every initiative number and end combat?', { okLabel: 'Clear', danger: true })) A.clearInitiative(); } }, icon('trash'))));
+        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Clear initiative', 'aria-label': 'Clear initiative', onclick: async () => { if (await confirmDialog('Clear every initiative number and end combat?', { okLabel: 'Clear', danger: true })) A.clearInitiative(); } }, icon('trash')),
+        minimize));
     } else if (turn.active) {
       add(el, h('div', { class: 'cr-turnbar' }, h('span', { class: 'cr-round' }, `Round ${turn.round || 1}`),
-        current === 'hidden' ? h('span', { class: 'muted text-sm' }, 'Something unseen acts…') : null));
+        current === 'hidden' ? h('span', { class: 'muted text-sm' }, 'Something unseen acts…') : null,
+        h('span', { class: 'spacer' }), minimize));
     }
 
     // my characters (players) or everyone on the board (DM) still without a number

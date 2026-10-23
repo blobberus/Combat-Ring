@@ -346,9 +346,11 @@ export function project(dm) {
   if (banner.showTime && banner.time) shownBanner.time = banner.time;
   if (banner.showLocation && banner.location) shownBanner.location = banner.location;
   const blackout = !!dmeta.blackout;
+  const unlocked = live ? Object.entries(dmeta.unlocked?.[live] || {}).filter(([, v]) => v).map(([id]) => id).sort() : [];
   out.set('meta', {
     live: blackout ? null : live,
     blackout,
+    unlocked, // characters whose players may move their token on the live scene (locked by default)
     banner: Object.keys(shownBanner).length ? shownBanner : null,
     measure: dmeta.measure || null,
   });
@@ -366,7 +368,7 @@ export function project(dm) {
       map: s.map?.media ? mediaRef(s.map.media) : s.map?.url ? { url: s.map.url } : null,
       grid: { size: cellPx(s), ft: ftPerCell(s), show: s.grid?.show !== false && s.grid?.players !== false, color: s.grid?.color || null, opacity: s.grid?.opacity ?? 0.35 },
       light: { level: s.light?.level || 'bright', shared: !!s.light?.shared },
-      fogOn,
+      fogOn, fogColor: s.fogColor === 'white' ? 'white' : 'black',
     });
     if (fogOn) {
       for (const sh of fogShapes) {

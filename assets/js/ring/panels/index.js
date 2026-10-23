@@ -113,6 +113,8 @@ export function createPanel(app, { board }) {
     el,
     isOpen,
     open,
+    close: () => setOpen(false),
+    activeId: () => active().id,
     refresh(changes) {
       drawRail();
       const p = active();

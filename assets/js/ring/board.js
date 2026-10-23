@@ -5,7 +5,7 @@
 import { h, clear, add, mount } from '../core/dom.js';
 import { icon } from '../core/ui.js';
 import { getSetting } from '../core/settings.js';
-import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp } from './model.js';
+import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp, sortShapes } from './model.js';
 import { mediaUrl, cachedUrl, mediaKey, isUrl } from './media.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -32,9 +32,10 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
   add(desat, desatSvg);
   const darkSvg = svgEl('svg', { class: 'rg-dark' });
   const fogSvg = svgEl('svg', { class: 'rg-fog' });
+  const fogCanvas = h('canvas', { class: 'rg-fog-soft', hidden: true }); // the players' fog: soft edges
   const markLayer = h('div', { class: 'rg-layer rg-marks' });
   const overSvg = svgEl('svg', { class: 'rg-over' });
-  add(world, mapLayer, gridSvg, propLayer, ringSvg, tokLayer, desat, darkSvg, fogSvg, markLayer, overSvg);
+  add(world, mapLayer, gridSvg, propLayer, ringSvg, tokLayer, desat, darkSvg, fogCanvas, fogSvg, markLayer, overSvg);
   const empty = h('div', { class: 'rg-empty', hidden: true });
   add(root, world, empty);
   root.classList.add('rg-board');
@@ -237,12 +238,18 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     add(gridSvg, svgEl('path', { d, class: 'rg-grid-line', style: `${g.color ? `stroke:${g.color};` : ''}opacity:${g.opacity ?? 0.35}`, 'vector-effect': 'non-scaling-stroke' }));
   }
 
+  // The DM edits crisp, see-through fog with outlines (SVG); players get opaque fog with soft, misty edges (canvas).
   function renderFog(v) {
     const shapes = v.fog || [];
-    const sig = `${v.role}|${v.scene.fogOn}|${st.w}|${st.h}|${v.fogSel || ''}|${shapes.map((s) => `${s.id}:${s.z}:${s.on !== false}:${s.mode}:${s.pts.length}:${s.pts[0]},${s.pts[1]}`).join(';')}`;
+    const color = v.scene.fogColor === 'white' ? 'white' : 'black';
+    const sig = `${v.role}|${v.scene.fogOn}|${color}|${st.w}|${st.h}|${cellPx(v.scene)}|${v.fogSel || ''}|${v.fogErase ? 'e' : ''}|${shapes.map((s) => `${s.id}:${s.z}:${s.on !== false}:${s.mode}:${s.pts.length}:${s.pts[0]},${s.pts[1]}`).join(';')}`;
     if (sig === fogSig) return;
     fogSig = sig;
     clear(fogSvg);
+    fogSvg.dataset.color = color;
+    const soft = v.role !== 'dm';
+    fogCanvas.hidden = !soft;
+    if (soft) { softFog(v, shapes, color); return; }
     if (v.scene.fogOn === false || !shapes.length) return;
     const id = `fogmask-${Math.random().toString(36).slice(2, 7)}`;
     const mask = svgEl('mask', { id, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: st.w, height: st.h });
@@ -258,11 +265,76 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
       for (const s of shapes) {
         add(fogSvg, svgEl('path', {
           d: pathD(s.pts), 'data-fog': s.id,
-          class: ['rg-fog-edge', s.mode === 'reveal' ? 'is-reveal' : 'is-hide', s.on === false && 'is-off', v.fogSel === s.id && 'is-sel'].filter(Boolean).join(' '),
+          class: ['rg-fog-edge', s.mode === 'reveal' ? 'is-reveal' : 'is-hide', s.on === false && 'is-off', v.fogSel === s.id && 'is-sel', v.fogSel === s.id && v.fogErase && 'is-erase'].filter(Boolean).join(' '),
           'vector-effect': 'non-scaling-stroke',
         }));
       }
     }
+  }
+
+  // Fog for players, drawn at a modest resolution (it is soft anyway) and scaled with the board. Fog shapes grow by
+  // `r` and clearings shrink by `r` before the blur, so the blur never uncovers what the DM drew as hidden; the
+  // canvas reaches past the map edges so they stay covered too.
+  const MIST = { black: '#14110d', white: '#e8e4da' };
+  let grain = null;
+  function softFog(v, shapes, color) {
+    const on = v.scene.fogOn !== false ? sortShapes(shapes.filter((s) => s.on !== false && s.pts?.length >= 6)) : [];
+    if (!on.some((s) => s.mode !== 'reveal')) { fogCanvas.width = 1; fogCanvas.height = 1; fogCanvas.hidden = true; return; }
+    const r = cellPx(v.scene) * 0.16;
+    const m = Math.ceil(r * 3); // margin past the map edges (map units)
+    const W = st.w + m * 2, H = st.h + m * 2;
+    const k = Math.min(1, 2048 / Math.max(W, H));
+    const cw = Math.max(1, Math.round(W * k)), ch = Math.max(1, Math.round(H * k));
+    const a = document.createElement('canvas');
+    a.width = cw; a.height = ch;
+    const g = a.getContext('2d');
+    const tmp = document.createElement('canvas');
+    tmp.width = cw; tmp.height = ch;
+    const t = tmp.getContext('2d');
+    const path = (ctx, pts) => { ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); ctx.closePath(); };
+    for (const c of [g, t]) { c.setTransform(k, 0, 0, k, m * k, m * k); c.lineJoin = 'round'; c.lineWidth = r * 2; }
+    const fill = MIST[color];
+    for (const s of on) {
+      if (s.mode === 'reveal') {
+        // the clearing, shrunk by r, cut out of what is below it
+        t.setTransform(1, 0, 0, 1, 0, 0); t.clearRect(0, 0, cw, ch); t.setTransform(k, 0, 0, k, m * k, m * k);
+        t.globalCompositeOperation = 'source-over'; t.fillStyle = '#000'; path(t, s.pts); t.fill();
+        t.globalCompositeOperation = 'destination-out'; t.strokeStyle = '#000'; path(t, s.pts); t.stroke();
+        g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-out'; g.drawImage(tmp, 0, 0); g.restore();
+      } else {
+        g.globalCompositeOperation = 'source-over'; g.fillStyle = fill; g.strokeStyle = fill;
+        path(g, s.pts); g.fill(); g.stroke();
+      }
+    }
+    fogCanvas.width = cw; fogCanvas.height = ch;
+    Object.assign(fogCanvas.style, { left: `${-m}px`, top: `${-m}px`, width: `${W}px`, height: `${H}px` });
+    const out = fogCanvas.getContext('2d');
+    out.clearRect(0, 0, cw, ch);
+    if ('filter' in out) out.filter = `blur(${Math.max(1, (r / 2) * k)}px)`;
+    out.drawImage(a, 0, 0);
+    out.filter = 'none';
+    // a faint drifting grain so it reads as mist, not paint (only where there is fog)
+    if (!grain) grain = makeGrain();
+    const pat = out.createPattern(grain, 'repeat');
+    if (pat) { out.globalCompositeOperation = 'source-atop'; out.fillStyle = pat; out.fillRect(0, 0, cw, ch); out.globalCompositeOperation = 'source-over'; }
+  }
+
+  function makeGrain() {
+    const N = 512;
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g = c.getContext('2d');
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 36; i++) { // broad, faint clouds (tiling seamlessly)
+      const x = rnd() * N, y = rnd() * N, rad = 80 + rnd() * 120;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, rnd() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr;
+      for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) { g.save(); g.translate(dx, dy); g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill(); g.restore(); }
+    }
+    return c;
   }
 
   function setImg(img, src, fallbacks = []) {

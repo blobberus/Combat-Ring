@@ -23,8 +23,14 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   outside the frame is cropped. View and prepare any scene in secret; **Show this scene** makes it live. The DM bar
   always says what the players see (green dot: a scene; amber: hidden). **Hide from players** (DM bar, the live
   scene's row in Scenes, or Shift+H) lowers the curtain over the live scene until you show it again.
-- **Fog of war** (F): lasso, polygon or rectangle, in *Hide* or *Reveal* mode (Alt flips it), show/hide or erase a
-  shape, cover the whole map, lift or restore all fog. Players don't receive creatures or props under fog at all.
+- **Fog of war** (F): drag to draw fog with the lasso, polygon or rectangle (or a *Clearing*, a hole in fog; Alt
+  flips it), then **click a fog area to reveal it** to the players and click again to hide it. Cover the whole map,
+  reveal or hide everything, erase areas. Players see opaque **black or white fog** (per scene) with soft, misty
+  edges, and don't receive creatures or props under fog at all. The fog controls fold to a small tab (the tool stays
+  on).
+- **Characters are locked:** only the DM places, moves, resizes or removes the party's tokens, until the DM unlocks
+  a character for its player on that scene (its token menu, or the lock buttons and *Unlock all* in Party). New
+  scenes start locked.
 - **Creatures** (Creatures panel): the whole 5etools bestiary (about 4,500 creatures with their token art), with search
   and CR / type / size / book filters and the full stat block. *Place* (or drag a row onto the map). New creatures
   can start hidden. **Custom creatures** have their own editor: stat block with live preview, art (upload with a
@@ -51,8 +57,9 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 
 ## What players can do
 
-- Move their own token (snaps to the grid; Alt to place freely); the **movement circle** follows their speed, and
-  they can add their own ranges (Longbow 150 ft, Fire Bolt 120 ft, Dash, anything) in *Customize*.
+- Move their own token once the DM unlocks it (snaps to the grid; Alt to place freely). While it is locked,
+  **dragging it measures** how far a move or a shot reaches and the token stays put. The **movement circle** follows
+  their speed, and they can add their own ranges (Longbow 150 ft, Fire Bolt 120 ft, Dash, anything) in *Customize*.
 - **Darkvision:** in dim or dark scenes the board darkens beyond what they can see; darkvision (from the sheet's
   species, editable) shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
   Light sources (torches, campfires) light the dark for everyone.
@@ -64,7 +71,9 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - **Health bar look** (Settings, per device): bar, bar with HP, or off; below or above the token; thin, normal or
   thick; colored by health or one color. HP numbers show only where that person may see them.
 - **Pins** (P) that everyone sees; the DM resolves them or clears them all.
-- **Initiative:** type their own number; the list sorts itself and shows whose turn it is.
+- **Initiative:** type their own number; the list sorts itself and shows whose turn it is. During combat,
+  *Minimize* folds it into a small card at the top of the board: whose turn it is and who is next (the DM's has
+  Previous / Next).
 - Hover any token to see its name; the DM decides how much more they see.
 - **Measure** (M) with the 2024 rule (every square 5 ft), 5-10-5 or straight line; everyone sees the ruler.
   Double-click the map to ping it.

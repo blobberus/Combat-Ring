@@ -67,6 +67,7 @@ function turnTarget() {
 function pcTokens(sceneId, role) {
   const out = [];
   const turn = turnTarget();
+  const unlocked = world.dm ? world.d('dmeta')?.unlocked?.[sceneId] || {} : Object.fromEntries((world.t('meta')?.unlocked || []).map((id) => [id, true]));
   for (const [k, pos] of world.tList(`pct.${sceneId}.`)) {
     if (!pos) continue;
     const charId = k.slice(`pct.${sceneId}.`.length);
@@ -81,7 +82,7 @@ function pcTokens(sceneId, role) {
     out.push({
       key: viewKey('table', k), kind: 'pc', charId, x: opt?.x ?? pos.x, y: opt?.y ?? pos.y, w: sizeCells(p.size), h: sizeCells(p.size),
       name: p.name, label: p.name, owner: p.owner, img: p.img, accent: p.accent, mine, missing: p.missing,
-      canDrag: role === 'dm' || mine, selected: ui.selected.has(viewKey('table', k)), turn: turn === `pc-${charId}`,
+      canDrag: role === 'dm' || (mine && !!unlocked[charId]), locked: !unlocked[charId], selected: ui.selected.has(viewKey('table', k)), turn: turn === `pc-${charId}`,
       dragFrom: ui.dragFrom?.key === viewKey('table', k) ? ui.dragFrom : null,
       conditions: p.conditions, health, profile: p, z: 1000,
     });
@@ -257,7 +258,7 @@ function buildDm() {
   }
   tokens.push(...pcTokens(sceneId, 'dm'));
   marks.push(...pinMarks(sceneId, 'dm'));
-  const v = { role: 'dm', sceneId, scene, map: s.map?.media || s.map?.url || null, fog, fogSel: ui.fogSel, tokens, marks, live: world.d('dmeta')?.live === sceneId };
+  const v = { role: 'dm', sceneId, scene, map: s.map?.media || s.map?.url || null, fog, fogSel: ui.fogSel, fogErase: ui.fogShape === 'erase', tokens, marks, live: world.d('dmeta')?.live === sceneId };
   v.rings = ringsFor(tokens);
   v.light = lightSources(tokens, scene, [], 'dm');
   return v;
