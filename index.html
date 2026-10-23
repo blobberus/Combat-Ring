@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Combat Ring · The Stone Wardens</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Alegreya:ital,wght@0,400;0,500;0,700;1,400;1,700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/gate.css">
+  <link rel="stylesheet" href="assets/css/ring.css">
+  <link rel="stylesheet" href="assets/css/panels.css">
+  <script type="module" src="assets/js/main.js"></script>
+</head>
+<body>
+  <div id="gate" class="gate" hidden>
+    <form class="gate-card" id="gate-form" autocomplete="on">
+      <div class="gate-mark"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="assets/img/icons.svg#i-emblem"/></svg></div>
+      <h1 class="gate-title">The Combat Ring</h1>
+      <p class="gate-sub">The Stone Wardens · battle table</p>
+      <input type="text" name="username" value="warden" autocomplete="username" hidden>
+      <label class="field"><span class="field-label">Password</span><input class="input" type="password" id="gate-pass" autocomplete="current-password" required></label>
+      <label class="checkbox"><input type="checkbox" id="gate-remember"> <span>Remember this device</span></label>
+      <button class="btn btn-primary gate-enter" type="submit">Enter</button>
+      <p class="gate-error" role="alert" hidden></p>
+      <p class="gate-note muted"></p>
+    </form>
+  </div>
+
+  <div id="app" class="rg-app" hidden></div>
+  <div id="overlays"></div>
+  <noscript>This site needs JavaScript.</noscript>
+</body>
+</html>

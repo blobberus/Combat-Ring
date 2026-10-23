@@ -1,0 +1,27 @@
+{
+  "dataRoot": "content/combat-ring/",
+  "characters": "content/characters/",
+  "locations": "content/locations/",
+  "species": ["srd/species.json", "srd/stubs/species.json"],
+  "customSpecies": "content/library/species/",
+  "vaults": [
+    "vault.json",
+    "../Stone-Wardens/vault.json",
+    "https://raw.githubusercontent.com/blobberus/Stone-Wardens/main/vault.json"
+  ],
+  "authKey": "sw:auth",
+  "dmVault": "dm-vault.json",
+  "brokers": [
+    "wss://broker.hivemq.com:8884/mqtt",
+    "wss://broker.emqx.io:8084/mqtt"
+  ],
+  "bestiary": {
+    "index": "data/bestiary.json",
+    "data": "https://raw.githubusercontent.com/5etools-mirror-3/5etools-src/main/data/bestiary/",
+    "tokens": [
+      "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/bestiary/tokens/",
+      "https://5e.tools/img/bestiary/tokens/"
+    ]
+  },
+  "stoneWardens": "../Stone-Wardens/"
+}

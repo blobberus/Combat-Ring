@@ -1,0 +1,93 @@
+/* =============================================================================
+   Combat Ring: the password gate (from Stone-Wardens shell.css, so both doors look the same).
+   ============================================================================= */
+
+html, body { height: 100%; }
+body:has(> .rg-app:not([hidden])) { overflow: hidden; }
+
+/* ---------- Gate ----------------------------------------------------------- */
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+  overflow: auto;
+  background: var(--bg-sunk);
+  isolation: isolate;
+}
+/* the fallen firmament: a faint field of stars behind the card */
+.gate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink);
+  opacity: 0.11;
+  pointer-events: none;
+  -webkit-mask: var(--gate-stars) 0 0 / 420px 420px repeat;
+  mask: var(--gate-stars) 0 0 / 420px 420px repeat;
+}
+.gate-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(400px, 100%);
+  padding: 36px 32px 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.gate-mark {
+  display: flex;
+  justify-content: center;
+  color: var(--accent);
+  --emblem-star: var(--gold);
+}
+.gate-mark svg { width: 80px; height: 80px; }
+.gate-title {
+  margin: 0;
+  text-align: center;
+  font: 600 clamp(1.875rem, 1.55rem + 1.3vw, 2.25rem) / 1.05 var(--font-display);
+  letter-spacing: 0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.gate-sub {
+  margin: -6px 0 4px;
+  text-align: center;
+  font: italic 400 var(--text-md) / 1.35 var(--font-body);
+  color: var(--accent);
+}
+.gate-sub::after {
+  content: "\2042";
+  display: block;
+  margin-top: 14px;
+  font-style: normal;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--gold);
+}
+.gate-card .checkbox { margin-top: -4px; }
+.gate-enter { width: 100%; height: 44px; font-size: 1.0625rem; }
+.gate-error {
+  margin: 0;
+  padding: 8px 12px;
+  font: 500 var(--text-sm) / 1.4 var(--font-ui);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm);
+}
+.gate-note { margin: 0; text-align: center; font: 400 0.875rem / 1.45 var(--font-ui); }
+.gate-note:empty { display: none; }
+@media (max-width: 479px) {
+  .gate { place-items: start center; padding-top: 10vh; }
+  .gate-card { padding: 28px 20px 22px; }
+}
+
+:root {
+  --gate-stars: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 420' fill='black'%3E%3Ccircle cx='34' cy='52' r='1.6'/%3E%3Ccircle cx='121' cy='18' r='1.1'/%3E%3Ccircle cx='188' cy='96' r='1.4'/%3E%3Ccircle cx='262' cy='38' r='1'/%3E%3Ccircle cx='371' cy='71' r='1.7'/%3E%3Ccircle cx='72' cy='171' r='1'/%3E%3Ccircle cx='229' cy='188' r='1.2'/%3E%3Ccircle cx='318' cy='162' r='1.4'/%3E%3Ccircle cx='402' cy='214' r='1'/%3E%3Ccircle cx='21' cy='262' r='1.3'/%3E%3Ccircle cx='142' cy='247' r='1.6'/%3E%3Ccircle cx='281' cy='291' r='1'/%3E%3Ccircle cx='361' cy='331' r='1.3'/%3E%3Ccircle cx='96' cy='352' r='1.1'/%3E%3Ccircle cx='203' cy='381' r='1.5'/%3E%3Ccircle cx='310' cy='402' r='1'/%3E%3Cpath d='M151 140c.5 4 3 6.5 7 7-4 .5-6.5 3-7 7-.5-4-3-6.5-7-7 4-.5 6.5-3 7-7z'/%3E%3Cpath d='M352 252c.4 3 2.2 4.8 5.2 5.2-3 .4-4.8 2.2-5.2 5.2-.4-3-2.2-4.8-5.2-5.2 3-.4 4.8-2.2 5.2-5.2z'/%3E%3Cpath d='M58 296c.4 3.2 2.4 5.2 5.6 5.6-3.2.4-5.2 2.4-5.6 5.6-.4-3.2-2.4-5.2-5.6-5.6 3.2-.4 5.2-2.4 5.6-5.6z'/%3E%3Cpath d='M300 92c.3 2.4 1.8 3.9 4.2 4.2-2.4.3-3.9 1.8-4.2 4.2-.3-2.4-1.8-3.9-4.2-4.2 2.4-.3 3.9-1.8 4.2-4.2z'/%3E%3Cpath d='M246 336l26-17' stroke='black' stroke-width='1.2' stroke-linecap='round' opacity='.7'/%3E%3Ccircle cx='245' cy='337' r='2'/%3E%3Cpath d='M96 86l20-13' stroke='black' stroke-width='1' stroke-linecap='round' opacity='.6'/%3E%3Ccircle cx='95' cy='87' r='1.6'/%3E%3C/svg%3E");
+}

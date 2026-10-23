@@ -1,0 +1,232 @@
+// The board's view model for this device: what the DM edits, or what a player sees (the DM's "player view" shows the
+// same thing a player would, computed locally from the DM's state).
+import { h } from '../core/dom.js';
+import { getSetting } from '../core/settings.js';
+import { world, me } from './world.js';
+import { ui, viewKey } from './state.js';
+import { party, pcProfile } from './characters.js';
+import { project, sceneSize, fogged, sortShapes, healthState, K, keyTail, sizeCells } from './model.js';
+import { propById } from './props.js';
+
+export function dmScenes() {
+  return world.dList('scene.').map(([k, v]) => ({ ...v, id: v.id || keyTail(k) })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** The scene the DM has on the board. */
+export function dmViewingId() {
+  const scenes = dmScenes();
+  if (ui.viewing && scenes.some((s) => s.id === ui.viewing)) return ui.viewing;
+  const live = world.d('dmeta')?.live;
+  if (live && scenes.some((s) => s.id === live)) return live;
+  return scenes[0]?.id || null;
+}
+
+export const liveSceneId = () => (world.dm ? world.d('dmeta')?.live || null : world.t('meta')?.live || null);
+
+/** Is the DM looking at the players' view? */
+export const previewing = () => world.dm && getSetting('dmPreview');
+
+function creatureImgs(it) {
+  if (it.media) return [it.media];
+  if (it.img) return [it.img];
+  return it.tokens || [];
+}
+
+function propImg(it) {
+  if (it.media) return it.media;
+  if (it.img) return it.img;
+  return propById(it.prop)?.url || null;
+}
+
+function turnTarget() {
+  const turn = world.t('turn');
+  return turn?.active ? turn.current : null;
+}
+
+function pcTokens(sceneId, role) {
+  const out = [];
+  const turn = turnTarget();
+  for (const [k, pos] of world.tList(`pct.${sceneId}.`)) {
+    if (!pos) continue;
+    const charId = k.slice(`pct.${sceneId}.`.length);
+    const p = pcProfile(charId);
+    if (!p) continue;
+    const mine = me.owns(charId);
+    const opt = ui.optimistic.get(k);
+    out.push({
+      key: viewKey('table', k), kind: 'pc', charId, x: opt?.x ?? pos.x, y: opt?.y ?? pos.y, w: sizeCells(p.size), h: sizeCells(p.size),
+      name: p.name, label: p.name, owner: p.owner, img: p.img, accent: p.accent, mine, missing: p.missing,
+      canDrag: role === 'dm' || mine, selected: ui.selected.has(viewKey('table', k)), turn: turn === `pc-${charId}`,
+      dragFrom: ui.dragFrom?.key === viewKey('table', k) ? ui.dragFrom : null,
+      conditions: p.conditions, profile: p, z: 1000,
+    });
+  }
+  return out;
+}
+
+function pinMarks(sceneId, role) {
+  const out = [];
+  for (const [k, p] of world.tList('pin.')) {
+    if (p.scene !== sceneId) continue;
+    if (p.resolved && !ui.showResolved) continue;
+    const vk = viewKey('table', k);
+    out.push({
+      key: vk, kind: 'pin', x: p.x, y: p.y, color: p.color || null, label: p.text ? '' : '', text: p.text, by: p.by, resolved: !!p.resolved,
+      canDrag: role === 'dm' || p.byId === world.bus.cid || (p.by && p.by === me.name()), selected: ui.selected.has(vk), data: p,
+    });
+  }
+  return out;
+}
+
+/** Ranges around tokens: the selected (or always-on) PCs' circles and a dragged token's movement. */
+function ringsFor(tokens) {
+  const rings = [];
+  for (const t of tokens) {
+    if (t.kind !== 'pc' || !t.profile) continue;
+    const mode = t.profile.showRanges;
+    if (mode === 'never') continue;
+    if (mode === 'selected' && !t.selected && !t.dragFrom) continue;
+    for (const r of t.profile.ranges) {
+      if (!r.on || !(r.ft > 0)) continue;
+      const at = r.id === 'move' && t.dragFrom ? t.dragFrom : t;
+      rings.push({ x: at.x, y: at.y, ft: r.ft, label: `${r.label} ${r.ft} ft`, color: r.color || t.accent || null, kind: r.id === 'move' ? 'move' : 'range' });
+    }
+    if (t.profile.vision.show && t.profile.darkvision > 0) rings.push({ x: t.x, y: t.y, ft: t.profile.darkvision, label: `Darkvision ${t.profile.darkvision} ft`, kind: 'vision', color: t.profile.vision.tint || null });
+  }
+  return rings;
+}
+
+function lightSources(tokens, scene, viewerChars, role) {
+  const level = scene.light?.level || 'bright';
+  if (level === 'bright') return null;
+  const shared = !!scene.light?.shared;
+  const out = [];
+  for (const t of tokens) {
+    if (t.light && (t.light.bright || t.light.dim)) out.push({ x: t.x, y: t.y, bright: t.light.bright || 0, dim: t.light.dim || 0 });
+    if (t.kind !== 'pc' || !t.profile) continue;
+    if (t.profile.light) out.push({ x: t.x, y: t.y, bright: t.profile.light.bright || 0, dim: t.profile.light.dim || 0 });
+    const sees = role === 'dm' ? false : shared || viewerChars.includes(t.charId);
+    if (!sees) continue;
+    const v = t.profile.vision;
+    out.push({ x: t.x, y: t.y, darkvision: t.profile.darkvision, soft: v.soft, gray: v.gray, dim: v.dim, tint: v.tint, tintStrength: v.tintStrength, self: true });
+  }
+  return out;
+}
+
+function waiting(title, text) {
+  return [h('div', { class: 'rg-curtain' },
+    h('svg', { class: 'rg-curtain-mark', viewBox: '0 0 48 48', 'aria-hidden': 'true' }, h('use', { href: 'assets/img/icons.svg#i-emblem' })),
+    h('h2', { class: 'rg-curtain-title' }, title),
+    text ? h('p', { class: 'rg-curtain-text' }, text) : null)];
+}
+
+/** Player-side tokens from public objects (the table room, or a projection in the DM's preview). */
+function publicTokens(get, list, sceneId, role) {
+  const tokens = [];
+  const marks = [];
+  const turn = turnTarget();
+  for (const [k, it] of list('it.')) {
+    if (!it || it.scene !== sceneId) continue;
+    const id = keyTail(k);
+    const vk = viewKey('table', k);
+    if (it.kind === 'notice') {
+      marks.push({ key: vk, kind: 'notice', x: it.x, y: it.y, icon: it.icon, label: it.name, text: it.text, selected: ui.selected.has(vk), data: it });
+      continue;
+    }
+    const opt = ui.optimistic.get(k);
+    const base = {
+      key: vk, kind: it.kind, x: opt?.x ?? it.x, y: opt?.y ?? it.y, w: it.w, h: it.h, rot: it.rot, z: it.z || 0, name: it.name, label: it.name,
+      selected: ui.selected.has(vk), light: it.light, data: it, id,
+    };
+    if (it.kind === 'creature') {
+      tokens.push({ ...base, imgs: it.imgs?.length ? it.imgs : it.img ? [it.img] : [], disp: it.disp, health: it.health, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
+    } else {
+      tokens.push({ ...base, img: it.img || propById(it.prop)?.url || null, canDrag: !!it.movable && role !== 'dm' });
+    }
+  }
+  return { tokens, marks };
+}
+
+export function buildView() {
+  const role = world.dm && !previewing() ? 'dm' : 'player';
+  if (world.dm) return previewing() ? buildPreview() : buildDm();
+  return buildPlayer(role);
+}
+
+function buildPlayer() {
+  const meta = world.t('meta');
+  const sceneId = meta?.live || null;
+  const scene = sceneId ? world.t(K.scene(sceneId)) : null;
+  if (!meta) return { role: 'player', emptyContent: waiting('The ring is quiet', 'Waiting for the DM to set the table.') };
+  if (meta.blackout) return { role: 'player', emptyContent: waiting('The scene is being set', 'The DM will raise the curtain shortly.') };
+  if (!scene) return { role: 'player', emptyContent: waiting('No scene yet', 'When the DM shows a map, it appears here.') };
+  const fog = sortShapes(world.tList(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
+  const { tokens, marks } = publicTokens((k) => world.t(k), (p) => world.tList(p), sceneId, 'player');
+  tokens.push(...pcTokens(sceneId, 'player'));
+  marks.push(...pinMarks(sceneId, 'player'));
+  const v = { role: 'player', sceneId, scene: { ...scene, w: scene.w, h: scene.h }, map: scene.map, fog, tokens, marks };
+  v.rings = ringsFor(tokens);
+  v.light = lightSources(tokens, scene, me.chars(), 'player');
+  return v;
+}
+
+function buildPreview() {
+  const sceneId = dmViewingId();
+  if (!sceneId) return { role: 'player', emptyContent: waiting('No scenes yet', 'Create a scene in the Scenes panel.') };
+  const dm = new Map(world.bus.entries('dm'));
+  dm.set('dmeta', { ...(dm.get('dmeta') || {}), live: sceneId, blackout: false });
+  const pub = project(dm);
+  const scene = pub.get(K.scene(sceneId));
+  const get = (k) => pub.get(k) ?? null;
+  const list = (prefix) => [...pub.entries()].filter(([k]) => k.startsWith(prefix));
+  const fog = sortShapes(list(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
+  const { tokens, marks } = publicTokens(get, list, sceneId, 'player');
+  tokens.push(...pcTokens(sceneId, 'player'));
+  marks.push(...pinMarks(sceneId, 'player'));
+  let map = scene.map;
+  if (map?.pending) map = world.d(K.scene(sceneId))?.map?.media || null; // the DM can see the sealed image
+  const v = { role: 'player', preview: true, sceneId, scene, map, fog, tokens, marks };
+  v.rings = ringsFor(tokens);
+  const viewers = ui.previewChar ? [ui.previewChar] : party.all().map((c) => c.id);
+  v.light = lightSources(tokens, scene.light?.level ? scene : { ...scene, light: { level: 'bright' } }, viewers, 'player');
+  return v;
+}
+
+function buildDm() {
+  const sceneId = dmViewingId();
+  if (!sceneId) return { role: 'dm', emptyContent: waiting('No scenes yet', 'Open the Scenes panel and create the first map.') };
+  const s = world.d(K.scene(sceneId));
+  const { w, h: hh } = sceneSize(s);
+  const scene = { ...s, w, h: hh, grid: { size: s.grid?.size || 100, ft: s.grid?.ft || 5, show: s.grid?.show !== false, color: s.grid?.color, opacity: s.grid?.opacity ?? 0.35 }, light: s.light || { level: 'bright' }, fogOn: s.fogOn !== false };
+  const fogPre = `fog.${sceneId}.`;
+  const fog = sortShapes(world.dList(fogPre).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
+  const activeFog = fog.filter((f) => f.on !== false);
+  const tokens = [];
+  const marks = [];
+  const turn = turnTarget();
+  for (const [k, it] of world.dList('item.')) {
+    if (it.scene !== sceneId) continue;
+    const id = keyTail(k);
+    const vk = viewKey('dm', k);
+    const selected = ui.selected.has(vk);
+    if (it.kind === 'note') {
+      marks.push({ key: vk, kind: 'note', x: it.x, y: it.y, icon: it.icon || 'mk-quest', label: it.title || 'Note', selected, canDrag: true, hidden: !it.revealed, data: it });
+      continue;
+    }
+    const base = {
+      key: vk, kind: it.kind, id, x: it.x, y: it.y, w: it.w || 1, h: it.h || it.w || 1, rot: it.rot || 0, z: it.z || 0,
+      name: it.name, label: it.alias && it.alias !== it.name ? `${it.name} (${it.alias})` : it.name, hidden: !!it.hidden,
+      fogged: scene.fogOn && fogged(it.x, it.y, activeFog), selected, canDrag: !it.locked, light: it.light, data: it,
+    };
+    if (it.kind === 'creature') {
+      const hs = healthState(it.hp);
+      tokens.push({ ...base, imgs: creatureImgs(it), disp: it.disp || 'enemy', health: hs ? { ...hs, text: `${it.hp.cur}/${it.hp.max}${it.hp.temp ? ` +${it.hp.temp}` : ''}` } : null, conditions: it.conditions, turn: turn === `dm-${id}`, z: 500 + (it.z || 0) });
+    } else tokens.push({ ...base, img: propImg(it) });
+  }
+  tokens.push(...pcTokens(sceneId, 'dm'));
+  marks.push(...pinMarks(sceneId, 'dm'));
+  const v = { role: 'dm', sceneId, scene, map: s.map?.media || s.map?.url || null, fog, fogSel: ui.fogSel, tokens, marks, live: world.d('dmeta')?.live === sceneId };
+  v.rings = ringsFor(tokens);
+  v.light = lightSources(tokens, scene, [], 'dm');
+  return v;
+}
