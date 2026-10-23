@@ -538,6 +538,11 @@
   padding: 6px 12px; border-radius: var(--radius); background: rgb(12 10 8 / 0.6);
 }
 .rg-show-head:empty { display: none; }
+/* over a running show: the top-right bar stays reachable (log in as the DM, settings), faded until pointed at; the
+   DM's bar too while the DM looks through the players' eyes (the show's own controls are hidden then) */
+.rg-stage.has-show .rg-topright { z-index: 42; opacity: 0.7; transition: opacity 160ms; }
+.rg-stage.has-show .rg-topright:hover, .rg-stage.has-show .rg-topright:focus-within { opacity: 1; }
+.rg-stage.show-preview .rg-dmbar { z-index: 42; }
 .rg-show-bar {
   position: absolute; z-index: 41; left: 50%; bottom: var(--space-3); transform: translateX(-50%);
   display: flex; align-items: center; gap: 4px; padding: 4px 6px;

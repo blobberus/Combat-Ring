@@ -134,7 +134,15 @@ export function mountRing(app, { sandbox = false } = {}) {
     if (k === 'reduceMotion') app.classList.toggle('reduce-motion', !!getSetting('reduceMotion'));
     if (k === 'playerName' || k === 'chars') { world.setName(me.name()); announce(); }
   });
-  onDm(() => { drawTools(); render(); panel.rebuild(); announce(); });
+  onDm((active) => {
+    if (active) {
+      // logging in lands on the DM's own board: DM view (not a player view left on from last time), and a show that
+      // is already running moves to the corner with its controls
+      if (getSetting('dmPreview')) setSetting('dmPreview', false);
+      show.dmArrived();
+    }
+    drawTools(); render(); panel.rebuild(); announce();
+  });
   party.on(() => { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); });
 
   function renderTop() {

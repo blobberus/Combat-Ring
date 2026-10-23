@@ -55,7 +55,9 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   animations, crossfade / slow fade / slide / cut transitions, auto-advance and loop. GIFs and videos play as they
   are. The deck title and each slide's title and description can be kept from the players ("Players see …"
   boxes; the text isn't sent to them). Present and step through it; on your own screen switch it between
-  **Full screen**, **Corner** and **Hidden** to keep working on other scenes while the players watch.
+  **Full screen**, **Corner** and **Hidden** to keep working on other scenes while the players watch. Logging in as
+  the DM (or reloading) always opens the DM view; a slideshow that is already running waits in the corner with its
+  controls. The DM button and settings stay reachable over a full-screen show.
 - **Player view** (DM view / Player view switch at the left of the bottom bar, or Shift+P): the live scene exactly as players see it (the curtain
   while it is hidden), or how another scene will look once shown; through the whole party's eyes or one PC's.
 - **Undo / redo** (Ctrl+Z / Ctrl+Shift+Z) for the DM's edits.

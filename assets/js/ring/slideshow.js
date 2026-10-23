@@ -73,6 +73,7 @@ export function createSlideshow(stage) {
     const s = world.t('show');
     const dmControls = world.dm && !previewing();
     if (!s?.on) {
+      stage.classList.remove('has-show', 'show-preview');
       el.classList.remove('is-on', 'is-peek', 'is-tucked');
       bar.hidden = true;
       clearTimeout(autoTimer);
@@ -83,6 +84,9 @@ export function createSlideshow(stage) {
     }
     if (showId !== s.deck) { showId = s.deck; mode = 'full'; } // a new show starts full screen
     const m = dmControls ? mode : 'full';
+    // over a full-screen show the top-right bar (DM login, settings) stays reachable; in the player view, the DM bar too
+    stage.classList.toggle('has-show', m === 'full');
+    stage.classList.toggle('show-preview', world.dm && !dmControls);
     el.classList.add('is-on');
     el.classList.toggle('is-peek', m === 'peek');
     el.classList.toggle('is-tucked', m === 'hidden');
@@ -138,5 +142,16 @@ export function createSlideshow(stage) {
     }
   }
 
-  return { update, el };
+  /**
+   * The DM logged in (or came back) while a show was already running: put it in the corner with its controls, so
+   * the DM lands on the board and can step through or end it (players keep watching full screen).
+   */
+  function dmArrived() {
+    const s = world.t('show');
+    if (!s?.on) return;
+    showId = s.deck;
+    setMode('peek');
+  }
+
+  return { update, el, dmArrived };
 }
