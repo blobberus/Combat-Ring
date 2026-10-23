@@ -86,8 +86,8 @@ export function moveTo(vk, x, y, { final = true, before = null } = {}) {
     // a prop the DM made movable: ask the DM's client (it owns the item); show our move meanwhile
     ui.optimistic.set(key, { x, y, at: Date.now() });
     world.send('table', 'req', { op: 'move', id: keyTail(key), x, y });
-    if (final) setTimeout(() => { const o = ui.optimistic.get(key); if (o && Date.now() - o.at > 2500) ui.optimistic.delete(key); world.invalidate(); }, 3000);
-    world.invalidate();
+    if (final) setTimeout(() => { const o = ui.optimistic.get(key); if (o && Date.now() - o.at > 2500) ui.optimistic.delete(key); world.invalidate('view'); }, 3000);
+    world.invalidate('view');
     return;
   }
   const cur = world.t(key);

@@ -59,14 +59,16 @@ function propImg(it) {
   return propById(it.prop)?.url || null;
 }
 
-function turnTarget() {
-  const turn = world.t('turn');
+// Whose turn it is: the DM's own board reads the DM's turn (the players' copy says only "something unseen" for a
+// creature they can't see, which left the DM's enemies without the turn ring); players and the player view, theirs.
+function turnTarget(role) {
+  const turn = role === 'dm' ? world.d('dmeta')?.turn : world.t('turn');
   return turn?.active ? turn.current : null;
 }
 
 function pcTokens(sceneId, role) {
   const out = [];
-  const turn = turnTarget();
+  const turn = turnTarget(role);
   const unlocked = world.dm ? world.d('dmeta')?.unlocked?.[sceneId] || {} : Object.fromEntries((world.t('meta')?.unlocked || []).map((id) => [id, true]));
   for (const [k, pos] of world.tList(`pct.${sceneId}.`)) {
     if (!pos) continue;
@@ -152,7 +154,7 @@ const curtain = () => waiting('The scene is being set');
 function publicTokens(get, list, sceneId, role) {
   const tokens = [];
   const marks = [];
-  const turn = turnTarget();
+  const turn = turnTarget(role);
   for (const [k, it] of list('it.')) {
     if (!it || it.scene !== sceneId) continue;
     const id = keyTail(k);
@@ -199,6 +201,18 @@ function buildPlayer() {
   return v;
 }
 
+// The player view projects the DM's whole state; that is done again only when the DM's state changed (players'
+// moves and pins are table objects, read fresh each time).
+let previewCache = null;
+function previewProjection(sceneId) {
+  if (previewCache?.sceneId === sceneId && previewCache.version === world.version.dm) return previewCache.pub;
+  const dm = new Map(world.bus.entries('dm'));
+  dm.set('dmeta', { ...(dm.get('dmeta') || {}), live: sceneId, blackout: false });
+  const pub = project(dm);
+  previewCache = { sceneId, version: world.version.dm, pub };
+  return pub;
+}
+
 // The live scene shows exactly what the players see (the curtain while it is hidden); any other scene shows how it
 // will look once it is shown.
 function buildPreview() {
@@ -206,9 +220,7 @@ function buildPreview() {
   if (!sceneId) return { role: 'player', emptyContent: waiting('No scenes yet', 'Create a scene in the Scenes panel.') };
   const dmeta = world.d('dmeta') || {};
   if (dmeta.blackout && dmeta.live === sceneId) return { role: 'player', preview: true, emptyContent: curtain() };
-  const dm = new Map(world.bus.entries('dm'));
-  dm.set('dmeta', { ...(dm.get('dmeta') || {}), live: sceneId, blackout: false });
-  const pub = project(dm);
+  const pub = previewProjection(sceneId);
   const scene = pub.get(K.scene(sceneId));
   const get = (k) => pub.get(k) ?? null;
   const list = (prefix) => [...pub.entries()].filter(([k]) => k.startsWith(prefix));
@@ -225,6 +237,20 @@ function buildPreview() {
   return v;
 }
 
+// "Is this spot under fog?" remembered per spot until the fog changes (the DM's board asks it for every item on
+// every redraw).
+let fogMemo = { sig: '', at: new Map() };
+function fogTest(shapes) {
+  const sig = shapes.map((s) => `${s.id}:${s.z}:${s.mode}:${s.pts?.length}:${s.pts?.[0]},${s.pts?.[1]}`).join(';');
+  if (sig !== fogMemo.sig) fogMemo = { sig, at: new Map() };
+  return (x, y) => {
+    const k = `${x},${y}`;
+    let v = fogMemo.at.get(k);
+    if (v === undefined) { v = fogged(x, y, shapes); fogMemo.at.set(k, v); if (fogMemo.at.size > 5000) fogMemo.at.clear(); }
+    return v;
+  };
+}
+
 function buildDm() {
   const sceneId = dmViewingId();
   if (!sceneId) return { role: 'dm', emptyContent: waiting('No scenes yet', 'Open the Scenes panel and create the first map.') };
@@ -234,9 +260,10 @@ function buildDm() {
   const fogPre = `fog.${sceneId}.`;
   const fog = sortShapes(world.dList(fogPre).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
   const activeFog = fog.filter((f) => f.on !== false);
+  const underFog = fogTest(activeFog);
   const tokens = [];
   const marks = [];
-  const turn = turnTarget();
+  const turn = turnTarget('dm');
   for (const [k, it] of world.dList('item.')) {
     if (it.scene !== sceneId) continue;
     const id = keyTail(k);
@@ -249,7 +276,7 @@ function buildDm() {
     const base = {
       key: vk, kind: it.kind, id, x: it.x, y: it.y, w: it.w || 1, h: it.h || it.w || 1, rot: it.rot || 0, z: it.z || 0,
       name: it.name, label: it.alias && it.alias !== it.name ? `${it.name} (${it.alias})` : it.name, hidden: !!it.hidden,
-      fogged: scene.fogOn && fogged(it.x, it.y, activeFog), selected, canDrag: !it.locked, light: it.light, data: it,
+      fogged: scene.fogOn && underFog(it.x, it.y), selected, canDrag: !it.locked, light: it.light, data: it,
     };
     if (it.kind === 'creature') {
       const hs = healthState(it.hp);

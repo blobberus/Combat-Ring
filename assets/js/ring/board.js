@@ -5,7 +5,7 @@
 import { h, clear, add, mount } from '../core/dom.js';
 import { icon } from '../core/ui.js';
 import { getSetting } from '../core/settings.js';
-import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp, sortShapes } from './model.js';
+import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp, sortShapes, fogged } from './model.js';
 import { mediaUrl, cachedUrl, mediaKey, isUrl } from './media.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -20,7 +20,7 @@ const svgEl = (tag, attrs = {}) => {
 
 const initials = (name) => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 
-export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
+export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}) {
   const world = h('div', { class: 'rg-world' });
   const mapLayer = h('div', { class: 'rg-map' });
   const gridSvg = svgEl('svg', { class: 'rg-grid' });
@@ -77,18 +77,45 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     applyTransform();
   }
 
-  function fit(pad = 48) {
+  /**
+   * Fit what is worth seeing into the part of the board the floating bars leave free (insets from app.js): the whole
+   * map for the DM; for players, the part that isn't under fog (and their own tokens).
+   */
+  function fit(pad = 16) {
     const r = rect();
     if (!r.width || !r.height) return;
-    const s = clamp(Math.min((r.width - pad * 2) / st.w, (r.height - pad * 2) / st.h), MIN_ZOOM, 2);
+    const i = insets?.(r) || { top: 0, right: 0, bottom: 0, left: 0 };
+    const fw = Math.max(120, r.width - i.left - i.right), fh = Math.max(120, r.height - i.top - i.bottom);
+    const b = st.view?.role === 'player' ? seenBox(st.view) : null;
+    const box = b || { x0: 0, y0: 0, x1: st.w, y1: st.h };
+    const bw = Math.max(1, box.x1 - box.x0), bh = Math.max(1, box.y1 - box.y0);
+    const s = clamp(Math.min((fw - pad * 2) / bw, (fh - pad * 2) / bh), MIN_ZOOM, 2);
     st.s = s;
-    st.tx = (r.width - st.w * s) / 2;
-    st.ty = (r.height - st.h * s) / 2;
+    st.tx = i.left + (fw - bw * s) / 2 - box.x0 * s;
+    st.ty = i.top + (fh - bh * s) / 2 - box.y0 * s;
     applyTransform();
+  }
+
+  /** Players: the box around what isn't under fog (sampled), plus their own tokens; null when nothing is fogged. */
+  function seenBox(v) {
+    const shapes = v.scene?.fogOn === false ? [] : sortShapes((v.fog || []).filter((s) => s.on !== false && s.pts?.length >= 6));
+    if (!shapes.some((s) => s.mode !== 'reveal')) return null;
+    const n = 48, sx = st.w / n, sy = st.h / n;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const take = (x, y, rx, ry) => { x0 = Math.min(x0, x - rx); y0 = Math.min(y0, y - ry); x1 = Math.max(x1, x + rx); y1 = Math.max(y1, y + ry); };
+    for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+      const x = (a + 0.5) * sx, y = (b + 0.5) * sy;
+      if (!fogged(x, y, shapes)) take(x, y, sx / 2, sy / 2);
+    }
+    const c = cellPx(v.scene);
+    for (const t of v.tokens || []) if (t.mine) take(t.x, t.y, c, c);
+    if (!Number.isFinite(x0)) return null; // all of it under fog: show the map
+    return { x0: Math.max(0, x0 - c), y0: Math.max(0, y0 - c), x1: Math.min(st.w, x1 + c), y1: Math.min(st.h, y1 + c) };
   }
 
   function centerOn(x, y, s = st.s) {
     const r = rect();
+    st.touched = true;
     st.s = clamp(s, MIN_ZOOM, MAX_ZOOM);
     st.tx = r.width / 2 - x * st.s;
     st.ty = r.height / 2 - y * st.s;
@@ -104,6 +131,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
 
   root.addEventListener('wheel', (e) => {
     e.preventDefault();
+    st.touched = true;
     if (e.ctrlKey) zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01)); // trackpad pinch
     else if (e.shiftKey) { st.tx -= e.deltaY; applyTransform(); }
     else zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
@@ -147,6 +175,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
       const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      st.touched = true;
       st.tx += cx - pinch.cx;
       st.ty += cy - pinch.cy;
       applyTransform();
@@ -157,7 +186,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     if (pan) {
       st.tx = pan.tx + e.clientX - pan.x;
       st.ty = pan.ty + e.clientY - pan.y;
-      if (Math.abs(e.clientX - pan.x) + Math.abs(e.clientY - pan.y) > 3) pan.moved = true;
+      if (Math.abs(e.clientX - pan.x) + Math.abs(e.clientY - pan.y) > 3) { pan.moved = true; st.touched = true; }
       applyTransform();
       return;
     }
@@ -193,7 +222,18 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     onTool?.('dblclick', { pt: toWorld(e.clientX, e.clientY), e, target, board: api });
   });
 
-  new ResizeObserver(() => { if (st.fitted !== st.sceneId) { fit(); st.fitted = st.sceneId; } }).observe(root);
+  // A new scene is fitted once; after that a resize (the side panel opening, a window resize) keeps the middle of the
+  // view where it was instead of letting the map slide.
+  let lastSize = null;
+  new ResizeObserver(() => {
+    const r = rect();
+    if (st.fitted !== st.sceneId) { fit(); st.fitted = st.sceneId; } else if (lastSize && r.width && r.height) {
+      st.tx += (r.width - lastSize.w) / 2;
+      st.ty += (r.height - lastSize.h) / 2;
+      applyTransform();
+    }
+    if (r.width && r.height) lastSize = { w: r.width, h: r.height };
+  }).observe(root);
 
   // ---------- rendering ----------
 
@@ -341,18 +381,19 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     const key = mediaKey(src) + fallbacks.join('|');
     if (img.dataset.src === key) return;
     img.dataset.src = key;
+    delete img.dataset.failed;
     const list = [src, ...fallbacks].filter(Boolean);
     let i = 0;
     const tryNext = async () => {
       if (img.dataset.src !== key) return;
-      if (i >= list.length) { img.removeAttribute('src'); img.closest('.rg-tok')?.classList.add('no-art'); return; }
+      if (i >= list.length) { img.removeAttribute('src'); img.dataset.failed = '1'; img.closest('.rg-tok')?.classList.add('no-art'); return; }
       const s = list[i++];
       const url = cachedUrl(s) || await mediaUrl(s).catch(() => null);
       if (img.dataset.src !== key) return;
       if (url) img.src = url; else tryNext();
     };
     img.onerror = () => tryNext();
-    img.onload = () => img.closest('.rg-tok')?.classList.remove('no-art');
+    img.onload = () => { delete img.dataset.failed; img.closest('.rg-tok')?.classList.remove('no-art'); };
     tryNext();
   }
 
@@ -377,11 +418,15 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     const seen = new Set();
     const names = getSetting('names');
     const hpMode = getSetting('hpBars');
-    root.dataset.hpPos = getSetting('hpPos');
-    root.dataset.hpSize = getSetting('hpSize');
     const hpColor = getSetting('hpColor');
-    root.dataset.hpColor = hpColor ? 'one' : 'health';
-    root.style.setProperty('--hp-color', hpColor || '');
+    const look = `${getSetting('hpPos')}|${getSetting('hpSize')}|${hpColor}`;
+    if (root.dataset.look !== look) { // the whole board restyles when these change: only when they do
+      root.dataset.look = look;
+      root.dataset.hpPos = getSetting('hpPos');
+      root.dataset.hpSize = getSetting('hpSize');
+      root.dataset.hpColor = hpColor ? 'one' : 'health';
+      root.style.setProperty('--hp-color', hpColor || '');
+    }
     const sorted = [...v.tokens].sort((a, b) => (a.z || 0) - (b.z || 0));
     const order = { prop: [], tok: [] };
     for (const t of sorted) {
@@ -390,6 +435,11 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
       const layer = t.kind === 'prop' ? propLayer : tokLayer;
       if (el.parentNode !== layer) add(layer, el);
       order[t.kind === 'prop' ? 'prop' : 'tok'].push(el);
+      // untouched tokens keep their DOM as it is (a frame of a player's move touches one token, not all of them)
+      const sig = JSON.stringify([c, names, hpMode, el.classList.contains('is-dragging'), t.kind, t.x, t.y, t.w, t.h, t.rot, t.disp, t.hidden, t.selected, t.turn,
+        t.canDrag, t.mine, t.fogged, t.missing, t.accent, t.img, t.imgs, t.name, t.label, t.health, t.conditions]);
+      if (el.sig === sig) continue;
+      el.sig = sig;
       const w = sizeCells(t.w) * c, hh = sizeCells(t.h ?? t.w) * c;
       const x = t.x - w / 2, y = t.y - hh / 2;
       if (!el.classList.contains('is-dragging')) el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${t.rot || 0}deg)`;
@@ -397,7 +447,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
       el.style.height = `${hh}px`;
       el.className = ['rg-tok', `k-${t.kind}`, t.disp && `d-${t.disp}`, t.hidden && 'is-hidden', t.selected && 'is-selected', t.turn && 'is-turn',
         t.canDrag && 'can-drag', t.mine && 'is-mine', names === 'always' && 'show-name', names === 'never' && 'no-name', t.fogged && 'is-fogged',
-        el.classList.contains('is-dragging') && 'is-dragging', !t.img && !(t.imgs || []).length && 'no-art', t.missing && 'is-missing'].filter(Boolean).join(' ');
+        el.classList.contains('is-dragging') && 'is-dragging', ((!t.img && !(t.imgs || []).length) || el.firstChild.dataset.failed) && 'no-art', t.missing && 'is-missing'].filter(Boolean).join(' ');
       el.style.setProperty('--accent-tok', t.accent || '');
       const img = el.firstChild;
       const srcs = t.imgs || (t.img ? [t.img] : []);
@@ -435,6 +485,9 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
         marks.set(m.key, el);
         add(markLayer, el);
       }
+      const sig = JSON.stringify([el.classList.contains('is-dragging'), m.kind, m.x, m.y, m.resolved, m.selected, m.canDrag, m.hidden, m.color, m.icon, m.label]);
+      if (el.sig === sig) continue;
+      el.sig = sig;
       el.className = ['rg-mark', `m-${m.kind}`, m.resolved && 'is-resolved', m.selected && 'is-selected', m.canDrag && 'can-drag', m.hidden && 'is-hidden'].filter(Boolean).join(' ');
       if (!el.classList.contains('is-dragging')) el.style.transform = `translate(${m.x}px, ${m.y}px) scale(var(--inv))`;
       el.style.setProperty('--pin', m.color || '');
@@ -446,7 +499,11 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     for (const [k, el] of marks) if (!seen.has(k)) { el.remove(); marks.delete(k); }
   }
 
+  let ringSig = '';
   function renderRings(v) {
+    const sig = JSON.stringify([v.rings, v.scene.grid, st.w, st.h]);
+    if (sig === ringSig) return;
+    ringSig = sig;
     clear(ringSvg);
     for (const r of v.rings || []) {
       const rad = ftToPx(r.ft, v.scene);
@@ -463,11 +520,16 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
   }
 
   /** Darkness (dim / dark scenes) with darkvision and light sources cut out; darkvision areas desaturated. */
+  let lightSig = '';
   function renderLight(v) {
-    clear(darkSvg);
-    clear(desatSvg);
     const level = v.scene.light?.level || 'bright';
     const lit = v.light;
+    // the darkness is a full-map mask: rebuild (and repaint) it only when a light, a viewer or the level changed
+    const sig = JSON.stringify([level, v.role, lit, st.w, st.h, v.scene.grid]);
+    if (sig === lightSig) return;
+    lightSig = sig;
+    clear(darkSvg);
+    clear(desatSvg);
     if (!lit || level === 'bright') { darkSvg.style.display = 'none'; desat.style.display = 'none'; return; }
     darkSvg.style.display = '';
     const alpha = (level === 'dark' ? 0.97 : 0.5) * (v.role === 'dm' ? 0.45 : 1);
@@ -524,6 +586,7 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
   const overlays = new Map(); // id -> {kind, …, until}
 
   function drawOverlay() {
+    if (!overlays.size && !overSvg.firstChild) return;
     clear(overSvg);
     const v = st.view;
     if (!v) return;
@@ -595,15 +658,22 @@ export function createBoard(root, { onTool, onHover, onViewChange } = {}) {
     renderLight(v);
     renderFog(v);
     drawOverlay();
-    if (sceneChanged) { requestAnimationFrame(() => { fit(); st.fitted = st.sceneId; }); }
+    if (sceneChanged) { st.touched = false; fitFog = fogSig; requestAnimationFrame(() => { fit(); st.fitted = st.sceneId; }); } else if (v.role === 'player' && !st.touched && fogSig !== fitFog) {
+      // until a player pans or zooms, their view follows what the DM reveals
+      fitFog = fogSig;
+      requestAnimationFrame(() => { if (!st.touched) fit(); });
+    }
   }
+  let fitFog = '';
 
   const api = {
     root, world, st, render, fit, centerOn, toWorld, toScreen, zoomAt, setOverlay, drawOverlay,
     tokenEl: (key) => els.get(key) || null,
     markEl: (key) => marks.get(key) || null,
     setTool(tool) { st.tool = tool; root.dataset.tool = tool; },
-    zoomBy(f) { const r = rect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, f); },
+    zoomBy(f) { const r = rect(); st.touched = true; zoomAt(r.left + r.width / 2, r.top + r.height / 2, f); },
+    /** The Fit button / 0 key: fit again, and (players) follow what is revealed again until the next pan or zoom. */
+    refit() { st.touched = false; fit(); },
     get scale() { return st.s; },
   };
   applyTransform();

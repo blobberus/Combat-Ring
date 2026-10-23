@@ -137,14 +137,14 @@ function tokenDown(key, pt, e, board) {
         if (world.dm) group.push([room, wk, i.before]);
       }
       if (group.length && world.dm) world.record(group, 'move');
-      world.invalidate();
+      world.invalidate('view');
     },
     cancel() {
       board.setOverlay('drag', null);
       dragging(board, false);
       ui.dragFrom = null;
       for (const i of items) i.el?.classList.remove('is-dragging');
-      world.invalidate();
+      world.invalidate('view');
     },
   };
 }
@@ -299,8 +299,8 @@ function hover(pt, target, board) {
   }
   if (ui.tool === 'fog' && world.dm && !poly && !getSetting('dmPreview')) { // the fog a click would reveal / hide / erase
     const id = fogAt(pt);
-    if (id !== ui.fogSel) { setUi({ fogSel: id }); world.invalidate(); }
-  } else if (ui.fogSel) { setUi({ fogSel: null }); world.invalidate(); }
+    if (id !== ui.fogSel) { setUi({ fogSel: id }); world.invalidate('view'); }
+  } else if (ui.fogSel) { setUi({ fogSel: null }); world.invalidate('view'); }
   if (poly) board.setOverlay('fog', { kind: 'path', pts: [...poly.pts, Math.round(pt.x), Math.round(pt.y)], mode: poly.mode });
   return null;
 }
@@ -328,6 +328,6 @@ function placeDown(pt, e) {
   else if (p.kind === 'pc') key = A.placePc(p.charId, pt.x, pt.y);
   if (key) select(key);
   if (!e.shiftKey || p.kind === 'pc') { setUi({ placing: null }); hooks.afterPlace?.(); }
-  world.invalidate();
+  world.invalidate('view');
   return null;
 }

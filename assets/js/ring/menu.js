@@ -60,14 +60,51 @@ export function closeMenu() {
   if (host) { host.hidden = true; clear(host); }
 }
 
-export function refreshMenu(view) {
+/**
+ * After a redraw of the board (view, changes) or a pan / zoom (no arguments). The card is rebuilt only when something
+ * it shows changed; it follows its token when that moves or the board pans.
+ */
+export function refreshMenu(view, changes) {
   if (view) lastView = view;
   if (!currentKey || !host) return;
   if (currentKey === MULTI ? !multiOk() : !ui.selected.has(currentKey)) { closeMenu(); return; }
+  if (!view) { place(); return; }
+  if (changes && !shows(changes)) { if (moves(changes)) place(); return; }
   const a = document.activeElement;
   if (host.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !['checkbox', 'radio', 'range'].includes(a.type)) { place(); return; } // typing: keep the field
   draw();
 }
+
+const subjects = () => (currentKey === MULTI ? [...ui.selected] : [currentKey]).map(parseKey);
+
+/** [room, key or prefix] pairs the open card reads. */
+function readsFrom() {
+  const out = [['table', 'meta'], ['dm', 'dmeta']];
+  for (const { room, key } of subjects()) {
+    out.push([room, key]);
+    if (key.startsWith('pct.')) {
+      const charId = key.split('.').slice(2).join('.');
+      out.push(['table', K.pc(charId)], ['table', K.sheet(charId)], ['table', K.ini(`pc-${charId}`)]);
+    } else if (room === 'dm' && world.d(key)?.kind === 'note') out.push(['dm', 'fog.'], ['dm', 'item.']);
+  }
+  if (currentKey === MULTI) out.push(['table', 'ini.']);
+  return out;
+}
+
+/** Did something the card shows change? (A move only changes where it sits.) */
+function shows(c) {
+  if (c.table?.has('#') || c.dm?.has('#')) return true;
+  const reads = readsFrom();
+  for (const room of ['table', 'dm']) {
+    for (const k of c[room] || []) {
+      if (c.moved?.has(`${room}:${k}`)) continue;
+      if (reads.some(([r, p]) => r === room && (k === p || (p.endsWith('.') && k.startsWith(p))))) return true;
+    }
+  }
+  return false;
+}
+
+const moves = (c) => subjects().some(({ room, key }) => c[room]?.has(key));
 
 const findToken = (key) => lastView?.tokens?.find((t) => t.key === key) || lastView?.marks?.find((m) => m.key === key) || null;
 const token = () => findToken(currentKey);
@@ -334,7 +371,7 @@ function noteMenu(key, it) {
   const spawns = new Set(it.spawns || []);
   const hiddenItems = world.dList('item.').filter(([k, x]) => x.scene === it.scene && x.kind !== 'note' && (x.hidden || spawns.has(keyTail(k))));
   const fogList = h('div', { class: 'rg-link-list' }, fogs.length ? fogs.map(({ id: fid, f, i }) => h('label', {
-    class: 'checkbox', onpointerenter: () => { ui.fogSel = fid; world.invalidate(); }, onpointerleave: () => { ui.fogSel = null; world.invalidate(); },
+    class: 'checkbox', onpointerenter: () => { ui.fogSel = fid; world.invalidate('view'); }, onpointerleave: () => { ui.fogSel = null; world.invalidate('view'); },
   }, h('input', { type: 'checkbox', checked: linked.has(fid), onchange: (e) => p({ reveals: e.target.checked ? [...linked, fid] : [...linked].filter((x) => x !== fid) }, 'link fog') }),
   h('span', null, `Fog ${i + 1} (${f.mode === 'reveal' ? 'reveal' : 'hide'}${f.on === false ? ', off' : ''})`))) : h('p', { class: 'muted text-xs' }, 'No fog on this scene yet.'));
   const itemList = h('div', { class: 'rg-link-list' }, hiddenItems.length ? hiddenItems.map(([k, x]) => {

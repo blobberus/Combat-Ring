@@ -4,8 +4,24 @@ import { Bus } from '../core/bus.js';
 import { getSetting } from '../core/settings.js';
 
 const listeners = new Set();
-let pending = { table: new Set(), dm: new Set(), remote: false };
+// What changed since the last frame. moved: 'room:key' of objects whose only change was their position (panels and
+// menus that don't show positions skip those); structural: a room was joined or a relay came back (re-project);
+// view: only how this screen looks changed (hover, selection), no data.
+const fresh = () => ({ table: new Set(), dm: new Set(), remote: false, moved: new Set(), structural: false, view: false });
+let pending = fresh();
 let frame = 0;
+
+/** Did an object change only its position (x, y)? */
+function posOnly(prev, next) {
+  if (!prev || !next || typeof prev !== 'object' || typeof next !== 'object') return false;
+  if (prev.x === next.x && prev.y === next.y) return false;
+  const { x: _a, y: _b, ...p } = prev;
+  const { x: _c, y: _d, ...n } = next;
+  const keys = Object.keys(n);
+  if (keys.length !== Object.keys(p).length) return false;
+  for (const k of keys) if (p[k] !== n[k] && JSON.stringify(p[k]) !== JSON.stringify(n[k])) return false;
+  return true;
+}
 
 const undoStack = [];
 const redoStack = [];
@@ -14,16 +30,24 @@ const MAX_UNDO = 80;
 export const world = {
   bus: null,
   dm: false, // the DM room is joined (DM unlocked)
+  version: { table: 0, dm: 0 }, // bumped by every change in a room (for caches of things computed from a whole room)
 
   init({ brokers, local }) {
     this.bus = new Bus({ brokers, local, name: getSetting('playerName') || 'A Warden' });
     this.bus.on((ev) => {
       if (ev.type === 'obj') {
-        pending[ev.room]?.add(ev.key);
+        const set = pending[ev.room];
+        if (!set) return;
+        this.version[ev.room]++;
+        const id = `${ev.room}:${ev.key}`;
+        if (!set.has(ev.key) ? posOnly(ev.prev, ev.value) : pending.moved.has(id) && posOnly(ev.prev, ev.value)) pending.moved.add(id);
+        else pending.moved.delete(id);
+        set.add(ev.key);
         if (!ev.local) pending.remote = true;
         schedule();
       } else if (ev.type === 'room' || ev.type === 'status') {
         pending.table.add('#'); // something structural: redraw everything
+        pending.structural = true;
         schedule();
       }
     });
@@ -66,9 +90,13 @@ export const world = {
 
   send(room, channel, data) { this.bus.send(room, channel, data); },
 
-  /** fn({table: Set<key>, dm: Set<key>, remote}) once per animation frame with what changed ('#' = everything). */
+  /**
+   * fn({table: Set<key>, dm: Set<key>, remote, moved, structural, view}) once per animation frame with what changed
+   * ('#' = everything).
+   */
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-  invalidate() { pending.table.add('#'); schedule(); },
+  /** Redraw: everything (data outside the rooms changed, e.g. a sheet), or with 'view' only the board and menus. */
+  invalidate(kind = 'all') { if (kind === 'view') pending.view = true; else pending.table.add('#'); schedule(); },
 };
 
 let grouping = null;
@@ -117,7 +145,7 @@ function flush() {
   clearTimeout(fallback);
   frame = 0;
   const p = pending;
-  pending = { table: new Set(), dm: new Set(), remote: false };
+  pending = fresh();
   for (const fn of listeners) {
     try { fn(p); } catch (e) { console.error('[world] listener failed', e); }
   }

@@ -20,8 +20,8 @@ export function startProjector() {
       if (k.startsWith('item.')) items.add(keyTail(k));
       else full = true;
     }
-    if (p.table.has('#')) full = true;
-    if (p.dm.size || p.table.has('#')) schedule();
+    if (p.structural) full = true; // a room joined or a relay came back (not a redraw of this screen)
+    if (p.dm.size || p.structural) schedule();
   });
   unsubMsg = world.bus.on((ev) => { if (ev.type === 'msg' && ev.room === 'table' && ev.channel === 'req') handleRequest(ev); });
   full = true;

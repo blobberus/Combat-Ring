@@ -72,6 +72,11 @@ the SW sheets), `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
 - The board holds pointer capture during presses: find targets with `elementFromPoint`, not `e.target`, in
   click/dblclick handlers.
 - UI state that must not sync (tool, selection, viewing scene) lives in `state.js`; per-device prefs in settings.
+- Redraws (players' moves arrive many times a second): `world.on` changes carry `moved` (`room:key` of
+  position-only changes; panels' `hasChanges` and the token menu ignore them), `structural` (a room joined: the
+  projector re-projects; it ignores `'#'`) and `view`. Use `world.invalidate('view')` for board-only redraws (hover,
+  drag end); plain `invalidate()` (`'#'`) redraws every panel. Board layers, tokens, marks and app.js bars rebuild only
+  when their signature changed; never rebuild a control under the pointer on every frame.
 
 ## Testing
 - `node tools/test_model.mjs` (pure model + projection) and `node tools/test_live.mjs` (real brokers).

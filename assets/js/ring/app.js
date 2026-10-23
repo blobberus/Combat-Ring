@@ -38,7 +38,27 @@ export function mountRing(app, { sandbox = false } = {}) {
     onTool: (type, ctx) => handleTool(type, ctx),
     onHover: (e) => tip(e),
     onViewChange: () => { refreshMenu(); zoomLabel(); },
+    insets: (r) => floatingInsets(r),
   });
+
+  // How far the floating bars reach in from each edge of the board, so Fit uses the open part. Each bar counts against
+  // the edge it sits by (the one that costs least: the top bar is wide, so it takes from the top, not the left).
+  function floatingInsets(r) {
+    const out = { top: 8, right: 8, bottom: 8, left: 8 };
+    try {
+      for (const el of [top, topright, banner, turnCard, toolsEl, sub, zoom, dmbar]) {
+        if (!el || el.hidden || !el.offsetParent) continue;
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
+        const near = [['top', b.top - r.top, b.bottom - r.top], ['bottom', r.bottom - b.bottom, r.bottom - b.top],
+          ['left', b.left - r.left, b.right - r.left], ['right', r.right - b.right, r.right - b.left]].filter(([, gap]) => gap < 120);
+        if (!near.length) continue;
+        const [edge, , reach] = near.sort((x, y) => x[2] - y[2])[0];
+        out[edge] = Math.max(out[edge], reach + 8);
+      }
+    } catch { /* the bars aren't built yet */ }
+    return out;
+  }
   board.setTool(ui.tool);
 
   // ---------- top left: brand + scene ----------
@@ -64,7 +84,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Zoom out (−)', 'aria-label': 'Zoom out', onclick: () => board.zoomBy(1 / 1.25) }, icon('minus')),
     h('span', { class: 'rg-zoom-level num' }, '100%'),
     h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => board.zoomBy(1.25) }, icon('plus')),
-    h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Fit the map (0)', 'aria-label': 'Fit the map', onclick: () => board.fit() }, icon('fit')));
+    h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Fit to the screen (0): the whole map, or for players what isn’t under fog', 'aria-label': 'Fit to the screen', onclick: () => board.refit() }, icon('fit')));
   const dmbar = h('div', { class: 'rg-dmbar rg-float', hidden: true });
   const placingBar = h('div', { class: 'rg-placing rg-float', hidden: true });
   const banner = h('div', { class: 'rg-banner rg-float', hidden: true });
@@ -72,6 +92,7 @@ export function mountRing(app, { sandbox = false } = {}) {
   const tipEl = h('div', { class: 'rg-tip', hidden: true });
   add(stage, top, banner, turnCard, topright, toolsEl, sub, zoom, dmbar, placingBar);
   add(document.body, tipEl);
+  requestAnimationFrame(() => { if (zoom.offsetWidth) stage.style.setProperty('--zoom-w', `${zoom.offsetWidth}px`); }); // the DM bar starts after it
 
   const show = createSlideshow(stage);
   const panel = createPanel(app, { board });
@@ -80,7 +101,11 @@ export function mountRing(app, { sandbox = false } = {}) {
   // ---------- rendering ----------
   let view = null;
   let fogPanelSig = '';
-  function render() {
+  // Each bar is rebuilt only when what it shows changed (a rebuild under the pointer eats clicks and hovers, and
+  // players' moves arrive many times a second).
+  const sigs = new Map();
+  const changed = (name, sig) => { if (sigs.get(name) === sig) return false; sigs.set(name, sig); return true; };
+  function render(changes = null) {
     view = buildView();
     setCurrentView(view);
     const fps = `${view.sceneId}|${view.scene?.fogColor}`; // the fog controls show the viewed scene's fog color
@@ -92,10 +117,10 @@ export function mountRing(app, { sandbox = false } = {}) {
     renderTurn();
     renderDmBar();
     renderPlacing();
-    refreshMenu(view);
+    refreshMenu(view, changes);
     show.update();
   }
-  world.on((p) => { render(); panel.refresh(p); });
+  world.on((p) => { render(p); panel.refresh(p); });
   onUi((patch) => {
     if ('tool' in patch || 'fogShape' in patch || 'fogMode' in patch) { board.setTool(ui.tool); drawTools(); }
     if ('selected' in patch) { render(); if (ui.selected.size) openMenu([...ui.selected][0]); else closeMenu(); } // several: the DM's group menu
@@ -118,6 +143,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     const vid = dm ? dmViewingId() : null;
     const live = dm ? world.d('dmeta')?.live : world.t('meta')?.live;
     const name = dm ? scenes.find((s) => s.id === vid)?.name || 'No scene' : (live && world.t(K.scene(live))?.name) || (world.t('meta')?.blackout ? 'Curtain' : 'Waiting');
+    if (!changed('top', JSON.stringify([dm, vid, name, dm && vid ? playersSee() : null]))) return;
     mount(sceneBtn, h('span', { class: 'truncate' }, name), dm ? icon('chevron-down') : null);
     sceneBtn.disabled = !dm;
     sceneBtn.title = dm ? 'Switch the scene you are viewing' : '';
@@ -148,6 +174,7 @@ export function mountRing(app, { sandbox = false } = {}) {
       place = b?.location || null;
       time = b?.time || null;
     }
+    if (!changed('banner', JSON.stringify([place, time, note, dashed]))) return;
     if (!place && !time) { banner.hidden = true; return; }
     banner.hidden = false;
     banner.classList.toggle('is-dm-only', dashed);
@@ -174,7 +201,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     const dm = world.dm && !previewing();
     const turn = dm ? world.d('dmeta')?.turn : world.t('turn');
     const onPanel = panel.isOpen() && panel.activeId() === 'initiative';
-    if (!getSetting('iniMini') || !turn?.active || onPanel) { turnCard.hidden = true; return; }
+    if (!getSetting('iniMini') || !turn?.active || onPanel) { turnCard.hidden = true; sigs.delete('turn'); return; }
     const order = A.initiativeEntries({ forDm: dm }).filter((e) => e.value != null && e.value !== '');
     const name = (e) => (e?.charId ? party.get(e.charId)?.name || e.name : e?.name) || '—';
     const side = (e) => (e.charId ? 'pc' : e.src === 'x' ? 'x' : e.disp || 'enemy');
@@ -182,6 +209,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     const nextId = cur ? nextTurn(order, cur.id, turn.round || 1).current : null;
     const next = nextId && nextId !== cur?.id ? order.find((e) => e.id === nextId) : null;
     const mine = cur?.charId && me.owns(cur.charId);
+    if (!changed('turn', JSON.stringify([dm, turn, cur && [cur.id, name(cur), side(cur)], next && [next.id, name(next), side(next)], mine, banner.hidden, sigs.get('banner')]))) return;
     turnCard.hidden = false;
     turnCard.classList.toggle('is-mine', !!mine);
     turnCard.style.top = banner.hidden ? '' : `${banner.offsetTop + banner.offsetHeight + 8}px`;
@@ -205,24 +233,28 @@ export function mountRing(app, { sandbox = false } = {}) {
   }
 
   function renderDmBar() {
-    if (!world.dm) { dmbar.hidden = true; return; }
+    if (!world.dm) { dmbar.hidden = true; sigs.delete('dmbar'); return; }
     const vid = dmViewingId();
     const ps = playersSee();
+    const ss = saveState;
+    if (!changed('dmbar', JSON.stringify([vid, ps, previewing(), ui.previewChar, ss.saving, ss.dirty, ss.error]))) return;
     dmbar.hidden = false;
     dmbar.classList.toggle('is-preview', previewing());
     dmbar.classList.toggle('is-hidden-scene', ps.state === 'curtain');
     clear(dmbar);
+    // the DM view / Player view switch comes first and the bar's left edge is pinned, so switching (which changes
+    // what follows) never moves the switch from under the pointer
+    add(dmbar, segmented([{ value: 'dm', label: 'DM view', icon: 'dm' }, { value: 'players', label: 'Player view', icon: 'users', title: 'See the board as the players do (Shift+P)' }],
+      previewing() ? 'players' : 'dm', (v) => setSetting('dmPreview', v === 'players'), { className: 'rg-viewseg' }));
     if (!vid) { add(dmbar, h('span', null, 'Create a scene to begin.'), h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => panel.open('scenes') }, 'Scenes')); return; }
     add(dmbar, playersSeeLine(ps));
     const onBoard = ps.state === 'scene' && ps.id === vid;
     if (previewing() && !(ps.state === 'curtain' && ps.id === vid)) {
-      add(dmbar, h('span', { class: 'rg-dmbar-note' }, ui.previewChar ? `Through ${party.get(ui.previewChar)?.name || 'a PC'}` : 'Whole party', onBoard ? '' : ' · how this scene will look once shown'));
+      const who = ui.previewChar ? `Through ${party.get(ui.previewChar)?.name || 'a PC'}` : 'Whole party';
+      add(dmbar, h('span', { class: 'rg-dmbar-note', title: onBoard ? `${who}: what the players see now` : `${who}: how this scene will look once you show it` }, onBoard ? who : `${who} · not shown yet`));
     }
     if (!onBoard) add(dmbar, h('button', { class: 'btn btn-primary btn-sm', type: 'button', title: 'Players see this scene now', onclick: () => A.goLive(vid) }, icon('eye'), 'Show this scene'));
     if (ps.state === 'scene') add(dmbar, h('button', { class: 'btn btn-sm', type: 'button', title: `Hide “${ps.name}”: players see the curtain until you show a scene (Shift+H)`, onclick: () => A.setBlackout(true) }, icon('eye-off'), 'Hide from players'));
-    add(dmbar, segmented([{ value: 'dm', label: 'DM view', icon: 'dm' }, { value: 'players', label: 'Player view', icon: 'users', title: 'See the board as the players do (Shift+P)' }],
-      previewing() ? 'players' : 'dm', (v) => setSetting('dmPreview', v === 'players'), { className: 'rg-viewseg' }));
-    const ss = saveState;
     add(dmbar, h('button', { class: 'btn-icon btn-sm', type: 'button', title: ss.saving ? 'Saving the backup…' : ss.error ? `Backup failed: ${ss.error}` : ss.dirty ? 'Save a backup to the repo now (Ctrl+S)' : 'Backed up', 'aria-label': 'Save backup', onclick: () => saveNow().then(() => toast('Backup saved.', { type: 'success' })).catch((e) => toast(`Backup failed: ${e.message}`, { type: 'error' })) }, icon(ss.error ? 'warning' : ss.dirty ? 'save' : 'check')));
   }
   onSaveState(() => renderDmBar());
@@ -230,7 +262,7 @@ export function mountRing(app, { sandbox = false } = {}) {
   function renderPlacing() {
     const p = ui.placing;
     placingBar.hidden = !p;
-    if (!p) return;
+    if (!changed('placing', JSON.stringify(p ? [p.name, p.kind] : null)) || !p) return;
     mount(placingBar, 
       h('span', null, 'Click the map to place ', h('strong', null, p.name || 'it'), p.kind === 'pc' ? '' : '. Shift-click to place more.'),
       h('button', { class: 'btn btn-sm', type: 'button', onclick: () => setUi({ placing: null }) }, 'Done'));
@@ -426,7 +458,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     else if (k === 'i' && dm && ui.selected.size) addSelectedToInitiative();
     else if (k === '+' || k === '=') board.zoomBy(1.25);
     else if (k === '-') board.zoomBy(0.8);
-    else if (k === '0') board.fit();
+    else if (k === '0') board.refit();
     else if (k.startsWith('arrow') && ui.selected.size) { e.preventDefault(); nudge(k, e.shiftKey ? 5 : 1); }
   });
 

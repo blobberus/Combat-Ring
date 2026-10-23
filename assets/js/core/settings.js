@@ -26,9 +26,13 @@ const DEFAULTS = {
 let cache = null;
 const listeners = new Set();
 
+// Stone-Wardens' settings, read once (the player name is asked for on every redraw) and again when that site changes them
+let sw = null;
 function swSettings() {
-  try { return JSON.parse(localStorage.getItem('sw:settings') || '{}') || {}; } catch { return {}; }
+  if (!sw) { try { sw = JSON.parse(localStorage.getItem('sw:settings') || '{}') || {}; } catch { sw = {}; } }
+  return sw;
 }
+addEventListener('storage', (e) => { if (e.key === 'sw:settings' || e.key === null) sw = null; });
 
 function read() {
   if (!cache) {

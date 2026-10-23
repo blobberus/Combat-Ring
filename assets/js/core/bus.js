@@ -34,6 +34,7 @@ class LocalTransport {
     this.subs = new Set();
     this.ch = new BroadcastChannel('cr-sandbox-bus');
     this.ch.onmessage = (ev) => this.deliver(ev.data.topic, ev.data.data, false);
+    addEventListener('pagehide', () => this.saveKept());
   }
 
   connect() {
@@ -45,10 +46,31 @@ class LocalTransport {
     return this;
   }
 
-  retained() { try { return JSON.parse(localStorage.getItem(RKEY) || '{}'); } catch { return {}; } }
+  retained() {
+    let r = {};
+    try { r = JSON.parse(localStorage.getItem(RKEY) || '{}'); } catch { r = {}; }
+    if (this.unsaved) for (const [t, b] of this.unsaved) { if (b) r[t] = b; else delete r[t]; }
+    return r;
+  }
 
   replay(filter) {
     for (const [t, b] of Object.entries(this.retained())) if (topicMatches(filter, t)) this.onMessage(t, b64decode(b), true);
+  }
+
+  // Retained copies are written to localStorage in batches (a drag publishes many times a second; rewriting the
+  // whole store each time was the slowest part of the sandbox). Other tabs read it only when they join.
+  keep(topic, bytes) {
+    (this.unsaved ||= new Map()).set(topic, bytes.length ? b64encode(bytes) : null);
+    if (!this.saveTimer) this.saveTimer = setTimeout(() => this.saveKept(), 250);
+  }
+
+  saveKept() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = 0;
+    if (!this.unsaved) return;
+    const r = this.retained();
+    this.unsaved = null;
+    try { localStorage.setItem(RKEY, JSON.stringify(r)); } catch (e) { console.warn('[bus] sandbox storage full', e); }
   }
 
   subscribe(filter) {
@@ -60,11 +82,7 @@ class LocalTransport {
   unsubscribe(filter) { this.subs.delete(filter); }
 
   publish(topic, bytes, { retain = false } = {}) {
-    if (retain) {
-      const r = this.retained();
-      if (bytes.length) r[topic] = b64encode(bytes); else delete r[topic];
-      try { localStorage.setItem(RKEY, JSON.stringify(r)); } catch (e) { console.warn('[bus] sandbox storage full', e); }
-    }
+    if (retain) this.keep(topic, bytes);
     this.ch.postMessage({ topic, data: bytes });
     this.deliver(topic, bytes, false); // a broker echoes to the sender too
     return true;
@@ -74,7 +92,7 @@ class LocalTransport {
     for (const f of this.subs) if (topicMatches(f, topic)) { this.onMessage(topic, data, retained); return; }
   }
 
-  close() { this.ch.close(); this.state = 'offline'; }
+  close() { this.saveKept(); this.ch.close(); this.state = 'offline'; }
 }
 
 export class Bus {

@@ -56,7 +56,7 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   are. The deck title and each slide's title and description can be kept from the players ("Players see …"
   boxes; the text isn't sent to them). Present and step through it; on your own screen switch it between
   **Full screen**, **Corner** and **Hidden** to keep working on other scenes while the players watch.
-- **Player view** (DM view / Player view switch, or Shift+P): the live scene exactly as players see it (the curtain
+- **Player view** (DM view / Player view switch at the left of the bottom bar, or Shift+P): the live scene exactly as players see it (the curtain
   while it is hidden), or how another scene will look once shown; through the whole party's eyes or one PC's.
 - **Undo / redo** (Ctrl+Z / Ctrl+Shift+Z) for the DM's edits.
 
@@ -83,7 +83,11 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 - **Pins** (P) that everyone sees; the DM resolves them or clears them all.
 - **Initiative:** type their own number; the list sorts itself and shows whose turn it is. During combat,
   *Minimize* folds it into a small card at the top of the board: whose turn it is and who is next (the DM's has
-  Previous / Next).
+  Previous / Next). Whoever's turn it is, character or creature, has a dashed gold ring on the board (the DM sees it on
+  hidden creatures too; players only on what they can see).
+- **Fit to the screen** (the corner button, or 0) fits the map into the part of the screen the bars leave free. For
+  players it fits what isn't under fog, and until they pan or zoom their view follows what the DM reveals. Opening or
+  closing the side panel keeps the middle of the view where it was.
 - Hover any token to see its name; the DM decides how much more they see.
 - **Measure** (M) with the 2024 rule (every square 5 ft), 5-10-5 or straight line; everyone sees the ruler.
   Double-click the map to ping it.

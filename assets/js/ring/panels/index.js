@@ -154,9 +154,11 @@ export function startPlacing(payload) {
   setUi({ placing: payload });
 }
 
+/** Did anything a panel shows change? Moves (position-only changes) don't count: no panel lists positions. */
 export const hasChanges = (changes, prefixes, room = 'both') => {
   if (changes.table?.has?.('#') || changes.dm?.has?.('#')) return true; // world.invalidate(): redraw everything
-  const sets = room === 'both' ? [changes.table, changes.dm] : [changes[room]];
-  for (const s of sets) for (const k of s || []) if (prefixes.some((p) => k.startsWith(p))) return true;
+  for (const r of room === 'both' ? ['table', 'dm'] : [room]) {
+    for (const k of changes[r] || []) if (!changes.moved?.has(`${r}:${k}`) && prefixes.some((p) => k.startsWith(p))) return true;
+  }
   return false;
 };
