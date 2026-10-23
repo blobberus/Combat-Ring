@@ -77,6 +77,11 @@ body:has(.modal-backdrop) .toasts { top: var(--space-4); bottom: auto; }
 .cr-ini-new { display: flex; align-items: center; gap: var(--space-2); padding: 4px 0; }
 .cr-ini-new .cr-ini-name { flex: 1; }
 .cr-ini-new .input { width: 80px; }
+.cr-sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: var(--space-4) 0 var(--space-2); }
+.cr-sec-head .cr-sec-title { margin: 0; }
+.cr-ini-find { padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.cr-ini-find:hover { text-decoration: underline; }
+.cr-ini-new.is-hidden .cr-ini-find { color: var(--ink-muted); font-style: italic; }
 .cr-ini { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .cr-ini-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 4px 8px 4px 4px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); border-left: 4px solid var(--disp-enemy); cursor: pointer; }
 .cr-ini-row.d-pc { border-left-color: var(--pin-lapis); }

@@ -35,7 +35,12 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   and CR / type / size / book filters and the full stat block. *Place* (or drag a row onto the map). New creatures
   can start hidden. **Custom creatures** have their own editor: stat block with live preview, art (upload with a
   circle crop, a bestiary token, or a URL), and *Start from a bestiary creature*.
-- **Token menu** (click a token): HP with Damage / Heal, roll HP, initiative (roll d20 + Dex), **size** (Tiny to
+- **Initiative for creatures:** *Add to initiative* in a creature's menu rolls d20 + Dex (or type the number). The
+  Initiative panel lists the creatures on the board that aren't in the order, each with *Add*, plus *Add all*.
+  Select several (Shift+drag a box, or Shift+click) for a group menu: add them all at once, optionally with **one
+  roll for the group** so they act together; it also hides, shows or deletes them. Shortcut: **I** adds the selected
+  creatures. Creatures on a scene that isn't live keep their number and join the order once it is.
+- **Token menu** (click a token): HP with Damage / Heal, roll HP, initiative (add / roll again / take out), **size** (Tiny to
   Gargantuan, or Custom: any number of squares across, e.g. 2.5), side (enemy,
   companion, neutral), **what players see of its stats** (nothing, a health bar, or the full stat block), conditions,
   the name players see (e.g. "Hooded figure"), a light it carries, hide / show, duplicate, order, lock, delete.

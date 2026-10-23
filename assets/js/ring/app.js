@@ -18,7 +18,7 @@ import { createSlideshow } from './slideshow.js';
 import { dmLoginDialog, dmMenu, settingsDialog, identityDialog } from './dialogs.js';
 import { saveNow, onSaveState, saveState } from './persist.js';
 import { party } from './characters.js';
-import { cellPx, K, nextTurn } from './model.js';
+import { cellPx, K, keyTail, nextTurn } from './model.js';
 import { mediaUrl } from './media.js';
 import { repo } from '../core/repo.js';
 
@@ -98,7 +98,7 @@ export function mountRing(app, { sandbox = false } = {}) {
   world.on((p) => { render(); panel.refresh(p); });
   onUi((patch) => {
     if ('tool' in patch || 'fogShape' in patch || 'fogMode' in patch) { board.setTool(ui.tool); drawTools(); }
-    if ('selected' in patch) { render(); if (ui.selected.size === 1) openMenu([...ui.selected][0]); else closeMenu(); }
+    if ('selected' in patch) { render(); if (ui.selected.size) openMenu([...ui.selected][0]); else closeMenu(); } // several: the DM's group menu
     if ('placing' in patch || 'viewing' in patch || 'previewChar' in patch) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
   });
   onSetting((k) => {
@@ -423,6 +423,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     else if (k === 'n' && dm) setUi({ tool: 'note' });
     else if (k === 'h' && e.shiftKey && world.dm) hideOrShowLive();
     else if (k === 'h' && dm && ui.selected.size) toggleHidden();
+    else if (k === 'i' && dm && ui.selected.size) addSelectedToInitiative();
     else if (k === '+' || k === '=') board.zoomBy(1.25);
     else if (k === '-') board.zoomBy(0.8);
     else if (k === '0') board.fit();
@@ -437,9 +438,15 @@ export function mountRing(app, { sandbox = false } = {}) {
   }
 
   function toggleHidden() {
-    const keys = [...ui.selected].map(parseKey).filter((x) => x.room === 'dm');
-    const anyShown = keys.some(({ key }) => !world.d(key)?.hidden);
-    for (const { key } of keys) { const it = world.d(key); if (it) world.dPut(key, { ...it, hidden: anyShown }, { undo: true, label: anyShown ? 'hide' : 'show' }); }
+    const keys = [...ui.selected].map(parseKey).filter((x) => x.room === 'dm' && world.d(x.key));
+    const anyShown = keys.some(({ key }) => !world.d(key).hidden);
+    A.setItemsHidden(keys.map(({ key }) => keyTail(key)), anyShown);
+  }
+
+  /** I: the selected creatures join initiative (d20 + Dex each). */
+  function addSelectedToInitiative() {
+    const ids = [...ui.selected].map(parseKey).filter((x) => x.room === 'dm' && world.d(x.key)?.kind === 'creature').map((x) => keyTail(x.key));
+    if (ids.length && !A.addToInitiative(ids, { say: true }).length) toast(ids.length === 1 ? 'Already in initiative.' : 'All already in initiative.', { timeout: 1500 });
   }
 
   function nudge(k, n) {

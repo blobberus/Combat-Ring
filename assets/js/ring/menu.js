@@ -16,8 +16,10 @@ import { cachedUrl, mediaUrl } from './media.js';
 import { colorFor } from './tools.js';
 
 let host = null;
-let currentKey = null;
+let currentKey = null; // a view key, or MULTI: the DM has several tokens selected
 let lastView = null;
+const MULTI = '*';
+const multiOk = () => ui.selected.size > 1 && world.dm && !previewing();
 
 export const LIGHTS = [
   { value: '', label: 'No light' },
@@ -46,7 +48,8 @@ function ensureHost() {
 }
 
 export function openMenu(key) {
-  currentKey = key;
+  currentKey = multiOk() ? MULTI : key;
+  if (!currentKey) { closeMenu(); return; }
   ensureHost();
   draw(); // no focus: the keyboard stays on the board (Delete, arrows, H)
 }
@@ -59,25 +62,26 @@ export function closeMenu() {
 export function refreshMenu(view) {
   if (view) lastView = view;
   if (!currentKey || !host) return;
-  if (!ui.selected.has(currentKey)) { closeMenu(); return; }
+  if (currentKey === MULTI ? !multiOk() : !ui.selected.has(currentKey)) { closeMenu(); return; }
   const a = document.activeElement;
   if (host.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !['checkbox', 'radio', 'range'].includes(a.type)) { place(); return; } // typing: keep the field
   draw();
 }
 
-function token() {
-  return lastView?.tokens?.find((t) => t.key === currentKey) || lastView?.marks?.find((m) => m.key === currentKey) || null;
-}
+const findToken = (key) => lastView?.tokens?.find((t) => t.key === key) || lastView?.marks?.find((m) => m.key === key) || null;
+const token = () => findToken(currentKey);
 
 function place() {
-  const t = token();
+  const ts = (currentKey === MULTI ? [...ui.selected] : [currentKey]).map(findToken).filter(Boolean);
   const board = getBoard();
-  if (!t || !board || !host || host.hidden) return;
+  if (!ts.length || !board || !host || host.hidden) return;
   const stage = host.parentElement.getBoundingClientRect();
   const c = lastView.scene?.grid?.size || 100;
-  const half = ((t.w ? sizeCells(t.w) : 0.3) * c) / 2;
-  const right = board.toScreen(t.x + half, t.y);
-  const left = board.toScreen(t.x - half, t.y);
+  const half = (t) => ((t.w ? sizeCells(t.w) : 0.3) * c) / 2;
+  const ys = ts.map((t) => t.y);
+  const y0 = (Math.min(...ys) + Math.max(...ys)) / 2; // beside the selection: right of it, else left
+  const right = board.toScreen(Math.max(...ts.map((t) => t.x + half(t))), y0);
+  const left = board.toScreen(Math.min(...ts.map((t) => t.x - half(t))), y0);
   const w = host.offsetWidth || 300;
   const hh = host.offsetHeight || 200;
   let x = right.x - stage.left + 14;
@@ -100,7 +104,8 @@ function draw() {
   const { room, key } = parseKey(currentKey);
   const dm = world.dm && !previewing();
   let body = null;
-  if (key.startsWith('pin.')) body = pinMenu(key);
+  if (currentKey === MULTI) body = multiMenu();
+  else if (key.startsWith('pin.')) body = pinMenu(key);
   else if (room === 'dm' && !dm) body = null; // the player view shows only what players get
   else if (room === 'dm') {
     const it = world.d(key);
@@ -150,6 +155,9 @@ function fold(label, content, id) {
 }
 
 function toggleIn(list, v) { const s = new Set(list || []); if (s.has(v)) s.delete(v); else s.add(v); return [...s]; }
+
+// field() is a <label>: a click on its caption would press the first button inside, so rows of buttons use this
+const fieldDiv = (label, control, hint) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
 
 const numIn = (v, onchange, label, props = {}) => h('input', { class: 'input input-number', type: 'number', value: v ?? '', 'aria-label': label, ...props, onchange: (e) => onchange(e.target.value === '' ? null : Number(e.target.value)) });
 
@@ -215,16 +223,22 @@ function creatureMenu(key, it) {
   const st = it.stats || {};
   const sub = [st.type, st.cr != null && st.cr !== '' ? `CR ${st.cr}` : null, st.ac != null ? `AC ${st.ac}` : null, st.ref?.src].filter(Boolean).join(' · ');
   const art = it.media || it.img || it.tokens?.[0] || null;
-  const dexMod = abilityMod(st.abilities?.dex ?? it.tie ?? 10);
+  const dexMod = A.creatureInitMod(it);
+  const inIni = it.init != null && it.init !== '';
   // the size menu shows the chosen 5e size (Small and Medium are both 1 square), or Custom with the squares across
   const w = it.w || 1;
   const size = it.size === 'custom' ? w : it.size && sizeCells(it.size) === w ? it.size : SIZE_NAMES.find((s) => s !== 'small' && sizeCells(s) === w) || w;
   return [
     head(art, it.name, sub, { editName: (v) => v && p({ name: v }, 'rename') }),
     ...hpBlock(() => world.d(K.item(id))?.hp, (hp, label) => p({ hp }, label), { formula: it.hpFormula, onRoll: () => { const r = Math.max(1, rollFormula(it.hpFormula)); p({ hp: { cur: r, max: r, temp: 0 } }, 'roll HP'); } }),
-    h('div', { class: 'rg-menu-row' },
-      field('Initiative', h('div', { class: 'row row-nowrap' }, numIn(it.init, (v) => p({ init: v }, 'initiative'), 'Initiative'),
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: `Roll d20 ${fmtMod(dexMod)}`, 'aria-label': 'Roll initiative', onclick: () => p({ init: rollFormula('1d20') + dexMod }, 'roll initiative') }, icon('d20'))))),
+    fieldDiv('Initiative', inIni
+      ? h('div', { class: 'row row-nowrap' }, numIn(it.init, (v) => p({ init: v }, 'initiative'), 'Initiative'),
+        h('button', { class: 'btn-icon btn-sm', type: 'button', title: `Roll again: d20 ${fmtMod(dexMod)}`, 'aria-label': 'Roll initiative again', onclick: () => A.addToInitiative([id], { force: true, say: true }) }, icon('d20')),
+        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Take it out of initiative', 'aria-label': 'Take it out of initiative', onclick: () => A.removeFromInitiative([id]) }, icon('close')))
+      : h('div', { class: 'row row-nowrap' },
+        h('button', { class: 'btn btn-sm', type: 'button', title: `Roll d20 ${fmtMod(dexMod)} and add it to the order`, onclick: () => A.addToInitiative([id], { say: true }) }, icon('d20'), 'Add to initiative'),
+        numIn(null, (v) => v != null && p({ init: v }, 'initiative'), 'Initiative', { placeholder: '—', title: 'Or type its number' })),
+    inIni && it.scene !== A.initiativeSceneId() ? 'It joins the order once this scene is live.' : null),
     field('Size', sizeControl(size, (v) => { const n = Math.max(sizeCells(v), 0.25); p({ w: n, h: n, size: typeof v === 'string' ? v : 'custom' }, 'size'); })),
     field('Side', segmented([{ value: 'enemy', label: 'Enemy' }, { value: 'ally', label: 'Companion' }, { value: 'neutral', label: 'Neutral' }], it.disp || 'enemy', (v) => p({ disp: v }, 'side'))),
     field('Players see its stats', segmented([{ value: 'none', label: 'No' }, { value: 'hp', label: 'Health' }, { value: 'full', label: 'Full' }], it.statsVisible || 'none', (v) => p({ statsVisible: v }, 'stats visibility')),
@@ -245,6 +259,40 @@ function creatureMenu(key, it) {
   ];
 }
 
+// ---------- DM: several tokens (Shift+drag a box, Shift+click) ----------
+
+let groupRoll = false; // "One roll for the group", remembered while the page is open
+
+function multiMenu() {
+  const keys = [...ui.selected];
+  const items = keys.map(parseKey).filter((x) => x.room === 'dm' && x.key.startsWith('item.')).map(({ key }) => ({ id: keyTail(key), it: world.d(key) })).filter((x) => x.it);
+  const kind = (k) => items.filter((x) => x.it.kind === k);
+  const creatures = kind('creature');
+  const out = creatures.filter((x) => x.it.init == null || x.it.init === '');
+  const n = (count, one, many) => (count ? `${count} ${count === 1 ? one : many}` : null);
+  const sub = [n(creatures.length, 'creature', 'creatures'), n(keys.filter((k) => k.startsWith('t:pct.')).length, 'character', 'characters'),
+    n(kind('prop').length, 'prop', 'props'), n(kind('note').length, 'interaction', 'interactions'), n(keys.filter((k) => k.startsWith('t:pin.')).length, 'pin', 'pins')].filter(Boolean).join(' · ');
+  const anyShown = items.some((x) => !x.it.hidden);
+  let ini = null;
+  if (out.length) {
+    ini = fieldDiv('Initiative', h('div', { class: 'stack stack-sm' },
+      h('button', { class: 'btn btn-primary btn-sm', type: 'button', title: groupRoll ? 'One d20 for them all: they act together' : 'Each rolls d20 + its Dex', onclick: () => A.addToInitiative(out.map((x) => x.id), { group: groupRoll, say: true }) },
+        icon('d20'), out.length === 1 ? `Add ${out[0].it.name} to initiative` : `Add ${out.length} creatures to initiative`),
+      out.length > 1 ? checkbox(groupRoll, (v) => { groupRoll = v; draw(); }, 'One roll for the group') : null),
+    out.length < creatures.length ? `${creatures.length - out.length} of them already in the order.` : null);
+  } else if (creatures.length) {
+    ini = fieldDiv('Initiative', h('div', { class: 'row row-nowrap' }, h('span', { class: 'muted text-sm' }, creatures.length === 1 ? 'In the order' : 'All in the order'),
+      h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => A.removeFromInitiative(creatures.map((x) => x.id)) }, 'Take them out')));
+  }
+  return [
+    head(null, `${keys.length} selected`, sub),
+    ini,
+    h('div', { class: 'rg-menu-actions' },
+      items.length ? act(anyShown ? 'eye-off' : 'eye', anyShown ? 'Hide' : 'Show to players', () => A.setItemsHidden(items.map((x) => x.id), anyShown), { active: !anyShown }) : null,
+      h('span', { class: 'spacer' }),
+      iconAct('trash', `Delete ${keys.length}`, () => A.deleteKeys(keys))),
+  ];
+}
 
 // ---------- DM: prop ----------
 

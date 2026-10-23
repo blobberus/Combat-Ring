@@ -3,7 +3,7 @@
 // and preferences.
 import { world, me, undoGroup } from './world.js';
 import { ui, parseKey, viewKey, clearSelection } from './state.js';
-import { K, newId, keyTail, snapPoint, sizeCells, rectPts, sceneSize, sortInitiative, nextTurn, rollFormula, abilityMod, SIZE_CELLS } from './model.js';
+import { K, newId, keyTail, snapPoint, sizeCells, rectPts, sceneSize, sortInitiative, nextTurn, rollFormula, abilityMod, fmtMod, SIZE_CELLS } from './model.js';
 import { getSetting } from '../core/settings.js';
 import { toast } from '../core/ui.js';
 import { dmViewingId, liveSceneId } from './view.js';
@@ -348,6 +348,21 @@ export const canEditPin = (p) => mineOrDm(p);
 // ini.pc-<char> (players write their own), ini.x-<id> (DM extras: lair actions…), ini.dm-<item> (projected from
 // creatures' init). The DM's list also shows its hidden creatures.
 
+/** The scene whose creatures make up the DM's initiative list: the live one, else the one on the board. */
+export const initiativeSceneId = () => world.d('dmeta')?.live || dmViewingId();
+
+export const creatureInitMod = (it) => abilityMod(it.stats?.abilities?.dex ?? it.tie ?? 10);
+
+const hasInit = (it) => it.init != null && it.init !== '';
+
+/** DM: the creatures on the initiative scene that aren't in the order yet, by name. */
+export function creaturesOutOfInitiative() {
+  const sceneId = initiativeSceneId();
+  return world.dList('item.').filter(([, it]) => it.kind === 'creature' && it.scene === sceneId && !hasInit(it))
+    .map(([k, it]) => ({ id: keyTail(k), it }))
+    .sort((a, b) => String(a.it.name).localeCompare(String(b.it.name), undefined, { numeric: true }));
+}
+
 export function initiativeEntries({ forDm = world.dm } = {}) {
   const out = [];
   for (const [k, e] of world.tList('ini.')) {
@@ -356,7 +371,7 @@ export function initiativeEntries({ forDm = world.dm } = {}) {
     out.push({ id, key: k, ...e });
   }
   if (forDm) {
-    const sceneId = world.d('dmeta')?.live || dmViewingId();
+    const sceneId = initiativeSceneId();
     for (const [k, it] of world.dList('item.')) {
       if (it.kind !== 'creature' || it.scene !== sceneId || it.init == null || it.init === '') continue;
       const id = keyTail(k);
@@ -386,18 +401,55 @@ export function addInitExtra(name, value) {
   world.tPut(K.ini(`x-${newId()}`), { name: name || 'Lair action', value: Number(value) || 20, src: 'x' }, dmUndo);
 }
 
-/** DM: roll d20 + Dex for the creatures on the live scene that have no initiative yet (or all with force). */
-export function rollCreatureInit({ force = false, onlyIds = null } = {}) {
-  const sceneId = world.d('dmeta')?.live || dmViewingId();
-  undoGroup('roll initiative', () => {
-    for (const [k, it] of world.dList('item.')) {
-      if (it.kind !== 'creature' || it.scene !== sceneId) continue;
-      if (onlyIds && !onlyIds.includes(keyTail(k))) continue;
-      if (!force && it.init != null && it.init !== '') continue;
-      const mod = abilityMod(it.stats?.abilities?.dex ?? it.tie ?? 10);
-      world.dPut(k, { ...it, init: rollFormula('1d20') + mod }, dmUndo);
-    }
+/**
+ * DM: put creatures into initiative, each with its own d20 + Dex (group: one roll for them all, so they act together).
+ * Creatures already in the order keep their number unless force; say: toast the rolls.
+ * Returns what was rolled: [{id, name, value, d20, mod}].
+ */
+export function addToInitiative(ids, { force = false, group = false, say = false } = {}) {
+  if (!world.dm) return [];
+  const todo = [].concat(ids).map((id) => [id, world.d(K.item(id))]).filter(([, it]) => it?.kind === 'creature' && (force || !hasInit(it)));
+  if (!todo.length) return [];
+  const shared = group && todo.length > 1 ? { d20: rollFormula('1d20'), mod: creatureInitMod(todo[0][1]) } : null;
+  const rolled = todo.map(([id, it]) => {
+    const r = shared || { d20: rollFormula('1d20'), mod: creatureInitMod(it) };
+    return { id, name: it.name, scene: it.scene, value: r.d20 + r.mod, ...r };
   });
+  undoGroup('add to initiative', () => {
+    for (const r of rolled) { const k = K.item(r.id); world.dPut(k, { ...world.d(k), init: r.value }, dmUndo); }
+  });
+  if (say) {
+    const [r] = rolled;
+    const how = `rolled ${r.d20}, ${fmtMod(r.mod)} Dex`;
+    const msg = rolled.length === 1 ? `${r.name}: ${r.value} on initiative (${how}).`
+      : shared ? `${rolled.length} creatures act together on ${r.value} (${how}).`
+        : rolled.length <= 4 ? `Initiative: ${rolled.map((x) => `${x.name} ${x.value}`).join(', ')}.`
+          : `${rolled.length} creatures rolled initiative.`;
+    const later = rolled.some((x) => x.scene !== initiativeSceneId()) ? (rolled.length === 1 ? ' It joins the order once this scene is live.' : ' They join the order once this scene is live.') : '';
+    toast(msg + later, { timeout: 3500 });
+  }
+  return rolled;
+}
+
+/** DM: show or hide items to the players, as one undo step. */
+export function setItemsHidden(ids, hidden) {
+  undoGroup(hidden ? 'hide' : 'show', () => {
+    for (const id of [].concat(ids)) { const k = K.item(id); const it = world.d(k); if (it) world.dPut(k, { ...it, hidden }, dmUndo); }
+  });
+}
+
+/** DM: take creatures out of the order. */
+export function removeFromInitiative(ids) {
+  undoGroup('remove from initiative', () => {
+    for (const id of [].concat(ids)) { const k = K.item(id); const it = world.d(k); if (it && hasInit(it)) world.dPut(k, { ...it, init: null }, dmUndo); }
+  });
+}
+
+/** DM: roll d20 + Dex for the creatures on the initiative scene that have no number yet (or all with force; or only these). */
+export function rollCreatureInit({ force = false, onlyIds = null, say = false } = {}) {
+  const sceneId = initiativeSceneId();
+  const ids = onlyIds || world.dList('item.').filter(([, it]) => it.kind === 'creature' && it.scene === sceneId).map(([k]) => keyTail(k));
+  return addToInitiative(ids, { force, say });
 }
 
 export function setTurn(patch) {

@@ -4,7 +4,7 @@ import { h, clear, add } from '../../core/dom.js';
 import { icon, toast, confirmDialog, promptDialog } from '../../core/ui.js';
 import { world, me } from '../world.js';
 import { party, pcProfile } from '../characters.js';
-import { K } from '../model.js';
+import { K, fmtMod } from '../model.js';
 import { select } from '../state.js';
 import * as A from '../actions.js';
 import { hasChanges } from './index.js';
@@ -34,7 +34,7 @@ export default {
             h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => A.setTurn({ active: false }) }, 'End')]
           : [h('button', { class: 'btn btn-primary btn-sm', type: 'button', disabled: !order.some((e) => e.value != null), onclick: () => A.setTurn({ active: true, round: 1, current: order.find((e) => e.value != null)?.id || null }) }, icon('sword'), 'Start combat')],
         h('span', { class: 'spacer' }),
-        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Roll for creatures without a number', 'aria-label': 'Roll for creatures', onclick: () => A.rollCreatureInit() }, icon('d20')),
+        h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Roll for creatures without a number', 'aria-label': 'Roll for creatures', onclick: () => A.rollCreatureInit({ say: true }) }, icon('d20')),
         h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Add an entry (lair action, event…)', 'aria-label': 'Add an entry', onclick: async () => { const n = await promptDialog('Add to initiative', { label: 'Name', value: 'Lair action' }); if (n) A.addInitExtra(n, 20); } }, icon('plus')),
         h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Clear initiative', 'aria-label': 'Clear initiative', onclick: async () => { if (await confirmDialog('Clear every initiative number and end combat?', { okLabel: 'Clear', danger: true })) A.clearInitiative(); } }, icon('trash')),
         minimize));
@@ -53,8 +53,20 @@ export default {
           h('input', { class: 'input input-number', type: 'number', inputmode: 'numeric', placeholder: '—', 'aria-label': `${c.name} initiative`, onchange: (e) => { if (e.target.value !== '') A.setPcInit(c.id, Number(e.target.value)); } })))));
     }
 
+    // DM: creatures on the board that have no turn yet; Add rolls d20 + Dex, or type a number
+    const outside = dm ? A.creaturesOutOfInitiative() : [];
+    const outsideList = outside.length ? h('div', { class: 'cr-waiting' },
+      h('div', { class: 'cr-sec-head' }, h('h3', { class: 'cr-sec-title' }, 'On the board, not in the order'),
+        outside.length > 1 ? h('button', { class: 'btn btn-sm', type: 'button', title: 'Each rolls d20 + its Dex', onclick: () => A.addToInitiative(outside.map((x) => x.id), { say: true }) }, icon('d20'), 'Add all') : null),
+      ...outside.map(({ id, it }) => h('div', { class: ['cr-ini-new', it.hidden && 'is-hidden'] },
+        h('button', { class: 'cr-ini-name cr-ini-find', type: 'button', title: 'Find it on the board', onclick: () => { select(`d:${K.item(id)}`); board.centerOn(it.x, it.y); } },
+          it.name, it.alias && it.alias !== it.name ? h('span', { class: 'muted text-xs' }, ` (${it.alias})`) : null),
+        it.hidden ? h('span', { class: 'badge badge-warn', title: 'Hidden: players don’t see it, or its line' }, icon('eye-off')) : null,
+        h('input', { class: 'input input-number', type: 'number', inputmode: 'numeric', placeholder: '—', 'aria-label': `${it.name} initiative`, onchange: (e) => { if (e.target.value !== '') A.patchItem(id, { init: Number(e.target.value) }, 'initiative'); } }),
+        h('button', { class: 'btn btn-sm', type: 'button', title: `Roll d20 ${fmtMod(A.creatureInitMod(it))} and add it`, onclick: () => A.addToInitiative([id], { say: true }) }, icon('d20'), 'Add')))) : null;
+
     if (!order.length) {
-      add(el, h('div', { class: 'empty-state' }, icon('d20'), h('p', null, dm ? 'Roll for the creatures on the scene, and the players enter theirs.' : 'When combat starts, enter your initiative above; the order sorts itself.')));
+      add(el, outsideList, h('div', { class: 'empty-state' }, icon('d20'), h('p', null, dm ? 'Add the creatures on the scene, and the players enter theirs.' : 'When combat starts, enter your initiative above; the order sorts itself.')));
       return;
     }
     const list = h('ol', { class: 'cr-ini', role: 'list' });
@@ -82,8 +94,8 @@ export default {
       dm || (isPc && me.owns(e.charId)) ? h('button', { class: 'btn-icon btn-sm', type: 'button', title: 'Remove from initiative', 'aria-label': 'Remove', onclick: () => A.setEntryInit(e, null) }, icon('close')) : null);
       add(list, li);
     }
-    add(el, list);
-    if (dm) add(el, h('p', { class: 'muted text-xs cr-foot' }, 'Hidden creatures stay off the players’ list. Their numbers are on each creature’s menu too.'));
+    add(el, list, outsideList);
+    if (dm) add(el, h('p', { class: 'muted text-xs cr-foot' }, 'Hidden creatures stay off the players’ list. A creature’s menu has its number too; select several (Shift+drag) to add them at once, or press I.'));
     void toast;
   },
 };

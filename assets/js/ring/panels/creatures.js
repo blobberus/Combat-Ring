@@ -137,7 +137,7 @@ function hereTab(el, board) {
   const anyShown = list.some(([, it]) => !it.hidden);
   add(el, h('div', { class: 'row cr-panel-actions' },
     h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { for (const [k, it] of list) world.dPut(k, { ...it, hidden: anyShown }, { undo: true }); } }, icon(anyShown ? 'eye-off' : 'eye'), anyShown ? 'Hide all' : 'Show all'),
-    h('button', { class: 'btn btn-sm', type: 'button', onclick: () => A.rollCreatureInit({ force: true, onlyIds: list.map(([k]) => keyTail(k)) }) }, icon('d20'), 'Roll initiative')));
+    h('button', { class: 'btn btn-sm', type: 'button', onclick: () => A.rollCreatureInit({ force: true, onlyIds: list.map(([k]) => keyTail(k)), say: true }) }, icon('d20'), 'Roll initiative')));
   const ul = h('ul', { class: 'cr-list', role: 'list' });
   for (const [k, it] of list) {
     const hs = healthState(it.hp);
