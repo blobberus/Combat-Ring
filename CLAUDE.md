@@ -36,10 +36,12 @@ tools/              build_bestiary.py, make_dm_vault.mjs, test_model.mjs, test_l
 `ring/`: `model.js` (pure: keys, geometry, fog, distances, initiative, **project()**), `world.js` (rooms, batching,
 undo, `me`), `state.js` (local UI state), `view.js` (view model per role), `board.js` (renderer + pan/zoom),
 `tools.js` (pointer tools), `actions.js` (every mutation), `menu.js` (token menu, stat block modal), `app.js`
-(shell: top bar, tools, zoom, DM bar, banner, tooltip, keys), `panels/` (party, initiative, pins; DM: scenes,
-creatures, props, slides, table = scene settings), `editors/` (scene/map, creature, PC token, crop), `slideshow.js`,
+(shell: top bar, tools, zoom, DM bar, banner, tooltip, keys), `panels/` (party, initiative, pins; DM: scenes (short
+list) + `scene-library.js` (the wide library: tree, cards, drag and drop), creatures, props, slides, table = scene
+settings), `editors/` (scene/map, creature, PC token, crop), `slideshow.js`,
 `projector.js`, `persist.js`, `media.js`, `characters.js`, `sheets.js` (live HP / conditions / senses / speed from
-the SW sheets), `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
+the SW sheets), `library.js` (the DM's map library: folders, pins, recent, the SW atlas), `bestiary.js`, `props.js`
+(built-in prop art), `dm.js`,
 `presence.js`, `dialogs.js`, `sandbox-seed.js`.
 
 ## Data flow
@@ -48,7 +50,10 @@ the SW sheets), `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
   `sw:auth` (same origin = one login for both sites).
 - **Data repo** = Stone-Wardens (the token only covers it). Combat-Ring writes only under `content/combat-ring/`
   (SW's Pages workflow ignores `content/**`). It reads `content/characters/*.json`, `srd/species.json` +
-  `srd/stubs/species.json` (+ `content/library/species/`) for speed/darkvision defaults, `content/locations/` names.
+  `srd/stubs/species.json` (+ `content/library/species/`) for speed/darkvision defaults, and SW's atlas for the map
+  library: `content/map/config.json` (main map, id `main`), `content/maps/<id>.json` (sub-maps: `name`, `parent`,
+  `image`), `content/locations/<id>.json` (places: `name`, `type`, `map`), per SW `docs/map-model.md`. If SW changes
+  that layout, update `library.js` (`loadAtlas`). SW's DM-hidden maps and places are sealed there and don't show.
 - **Sheets, live** (`sheets.js`): PC hit points, conditions + Exhaustion, senses and speed are SW's and read-only
   here. Computed with **SW's own rules engine**, imported at runtime from the SW site
   (`config.stoneWardens` + `assets/js/views/characters/engine.js`: `buildRules`, `derive`; SRD from its `srd/`):
@@ -62,12 +67,13 @@ the SW sheets), `bestiary.js`, `props.js` (built-in prop art), `dm.js`,
   (`actions.js` for app logic). The DM's `projector.js` publishes what players may see (`model.project`).
 - **Backups:** DM client commits `dm/state.bin` (sealed) + `table.json` at most every 3 min (`persist.js`); restored
   on DM login / when brokers are empty. Images: `media.js` (DM's sealed until shown; references carry blob shas).
-- Sandbox: `?sandbox` = IndexedDB repo + BroadcastChannel bus + sample party (`sandbox-seed.js`).
+- Sandbox: `?sandbox` = IndexedDB repo + BroadcastChannel bus + sample party and atlas (`sandbox-seed.js`).
 
 ## Conventions
 - `h()` / `add()` / `mount()` from core/dom.js; never native `el.append(x, maybeNull)` (it prints "null").
-- Panels: `{id, title, icon, dm?, relevant(changes), render(el, ctx)}`; they re-render on world changes except while
-  a text field inside has focus (`typingIn`); a committed field blurs itself.
+- Panels: `{id, title, icon, dm?, relevant(changes), render(el, ctx), headExtra?, wide?}`; they re-render on world
+  changes except while a text field inside has focus (`typingIn`); a committed field blurs itself. `wide()` true opens
+  the pane out over the board (`.rg-panel.is-wide`, negative margin: the stage keeps its size).
 - The token menu never takes focus on open (keyboard stays on the board).
 - The board holds pointer capture during presses: find targets with `elementFromPoint`, not `e.target`, in
   click/dblclick handlers.

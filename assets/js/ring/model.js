@@ -30,7 +30,8 @@ export const TIMES_OF_DAY = ['Dawn', 'Morning', 'Midday', 'Afternoon', 'Dusk', '
 // ---------- keys ----------
 // table room (every player): meta, scene.<id>, fog.<scene>.<shape>, it.<item>, pc.<char>, pct.<scene>.<char>,
 //   pin.<id>, ini.<id>, turn, show
-// dm room (DM only): dmeta, scene.<id>, fog.<scene>.<shape>, item.<id>, cre.<id>, media.<id>, deck.<id>
+// dm room (DM only): dmeta, scene.<id>, fog.<scene>.<shape>, item.<id>, cre.<id>, media.<id>, deck.<id>,
+//   folder.<id>, recent (the map library: library.js)
 export const K = {
   scene: (id) => `scene.${id}`,
   fog: (scene, id) => `fog.${scene}.${id}`,
@@ -44,6 +45,7 @@ export const K = {
   cre: (id) => `cre.${id}`,
   media: (id) => `media.${id}`,
   deck: (id) => `deck.${id}`,
+  folder: (id) => `folder.${id}`,
 };
 
 export const keyTail = (key) => key.slice(key.indexOf('.') + 1);

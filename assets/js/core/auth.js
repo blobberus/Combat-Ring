@@ -12,6 +12,8 @@ const DEFAULTS = {
   dataRoot: 'content/combat-ring/',
   characters: 'content/characters/',
   locations: 'content/locations/',
+  maps: 'content/maps/', // Stone Wardens' sub-maps (the main map: mainMap)
+  mainMap: 'content/map/config.json',
   species: [],
   customSpecies: 'content/library/species/',
   vaults: ['vault.json'],

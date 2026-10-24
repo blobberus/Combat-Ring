@@ -219,6 +219,17 @@ test('a sheet without the rules engine: rough numbers', () => {
   assert.equal(M.sheetVitals(doc, { hpMax: 0 }).approx, true); // the engine's error fallback has no HP
 });
 
+test('the map library stays with the DM', () => {
+  const dm = dmState();
+  dm.set('scene.s1', { ...dm.get('scene.s1'), folder: 'f-crypt', pin: 3, at: { map: 'vale', loc: 'brinewick' } });
+  dm.set('folder.f-crypt', { id: 'f-crypt', name: 'Crypt of secrets', parent: null, order: 0 });
+  dm.set('recent', { ids: ['s2', 's1'] });
+  const out = M.project(dm);
+  const sc = out.get('scene.s1');
+  for (const k of ['folder', 'pin', 'at']) assert.equal(sc[k], undefined);
+  for (const [k, v] of out) { assert.ok(!k.startsWith('folder.') && k !== 'recent'); assert.ok(!/Crypt of secrets|brinewick|Secret lair/.test(JSON.stringify(v))); }
+});
+
 test('projection diff', () => {
   const next = new Map([['meta', { live: 'a' }], ['it.x', { x: 1 }]]);
   const cur = [['meta', { live: 'a' }], ['it.y', { x: 2 }], ['pin.p', { t: 1 }]];

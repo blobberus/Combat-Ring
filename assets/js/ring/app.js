@@ -14,6 +14,8 @@ import { presence, startPresence, announce } from './presence.js';
 import { onDm } from './dm.js';
 import { openMenu, closeMenu, refreshMenu, openDetails, openPinEditor } from './menu.js';
 import { createPanel } from './panels/index.js';
+import { openLibrary, libraryEscape } from './panels/scene-library.js';
+import { noteViewed, pinned, recent } from './library.js';
 import { createSlideshow } from './slideshow.js';
 import { dmLoginDialog, dmMenu, settingsDialog, identityDialog } from './dialogs.js';
 import { saveNow, onSaveState, saveState } from './persist.js';
@@ -119,6 +121,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     renderPlacing();
     refreshMenu(view, changes);
     show.update();
+    if (world.dm && !previewing()) noteViewed(dmViewingId()); // the library's Recent list
   }
   world.on((p) => { render(p); panel.refresh(p); });
   onUi((patch) => {
@@ -139,6 +142,7 @@ export function mountRing(app, { sandbox = false } = {}) {
       // logging in lands on the DM's own board: DM view (not a player view left on from last time), and a show that
       // is already running moves to the corner with its controls
       if (getSetting('dmPreview')) setSetting('dmPreview', false);
+      if (getSetting('scenesWide')) setSetting('scenesWide', false); // the map library would cover the board
       show.dmArrived();
     }
     drawTools(); render(); panel.rebuild(); announce();
@@ -284,12 +288,20 @@ export function mountRing(app, { sandbox = false } = {}) {
     const box = h('div', { class: 'rg-pop rg-float', role: 'menu' });
     const close = () => { box.remove(); removeEventListener('pointerdown', outside, true); };
     const outside = (e) => { if (!box.contains(e.target) && e.target !== anchor) close(); };
-    add(box, h('div', { class: 'rg-pop-title' }, 'Scenes'));
-    for (const s of scenes) {
-      add(box, h('button', { class: ['rg-pop-item', s.id === dmViewingId() && 'is-active'], type: 'button', onclick: () => { setUi({ viewing: s.id }); clearSelection(); close(); } },
-        h('span', { class: 'truncate' }, s.name || 'Scene'), s.id === shown ? sceneBadge(s.id) : null));
+    const item = (s) => h('button', { class: ['rg-pop-item', s.id === dmViewingId() && 'is-active'], type: 'button', onclick: () => { setUi({ viewing: s.id }); clearSelection(); close(); } },
+      s.pin != null ? icon('pin') : null, h('span', { class: 'truncate' }, s.name || 'Scene'), s.id === shown ? sceneBadge(s.id) : null);
+    if (scenes.length <= 8) add(box, h('div', { class: 'rg-pop-title' }, 'Scenes'), scenes.map(item));
+    else { // many: the pinned ones, then the recent ones (and the live one); the rest in the library
+      const pins = pinned();
+      const seen = new Set(pins.map((s) => s.id));
+      let rec = recent().filter((s) => !seen.has(s.id));
+      const live = scenes.find((s) => s.id === shown);
+      if (live && !seen.has(live.id) && !rec.some((s) => s.id === live.id)) rec.unshift(live);
+      rec = (rec.length ? rec : scenes).slice(0, 6);
+      if (pins.length) add(box, h('div', { class: 'rg-pop-title' }, 'Pinned'), pins.map(item));
+      add(box, h('div', { class: 'rg-pop-title' }, 'Recent'), rec.map(item));
     }
-    add(box, h('button', { class: 'rg-pop-item', type: 'button', onclick: () => { close(); panel.open('scenes'); } }, icon('plus'), 'Manage scenes…'));
+    add(box, h('button', { class: 'rg-pop-item', type: 'button', onclick: () => { close(); openLibrary(null, panel); } }, icon('folder'), 'All maps and folders…'));
     const r = anchor.getBoundingClientRect();
     Object.assign(box.style, { left: `${r.left}px`, top: `${r.bottom + 6}px`, position: 'fixed' });
     add(document.body, box);
@@ -448,6 +460,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     if (mod && k === 'd' && dm) { e.preventDefault(); const keys = A.duplicateKeys([...ui.selected]); if (keys.length) { ui.selected.clear(); keys.forEach((x) => ui.selected.add(x)); render(); } return; }
     if (mod) return;
     if (k === 'escape') {
+      if (libraryEscape()) return; // the library opened out over the board: its selection, then the library
       if (ui.placing) setUi({ placing: null });
       else if (polyActive()) cancelPoly(board);
       else { clearSelection(); closeMenu(); }

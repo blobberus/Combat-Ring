@@ -76,6 +76,7 @@ export function createPanel(app, { board }) {
     const p = active();
     if (!force && typingIn(body)) { stale = true; return; }
     stale = false;
+    el.classList.toggle('is-wide', !!p.wide?.()); // a panel opened out over the board (the scene library)
     if (rendered !== p.id) {
       mount(head, h('h2', { class: 'rg-panel-title' }, p.title), p.headExtra ? p.headExtra(ctx) : null);
       clear(body);

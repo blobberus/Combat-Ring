@@ -1,6 +1,7 @@
 // New scene / edit map: size in squares, feet per square, the map image placed (moved and scaled) on that grid,
 // so the DM can crop and scale any image to the battle grid. "Pixels per square" lines up a gridded battlemap
 // exactly. Saving renders the framed image (WebP, at most 4096 px a side), sealed until the scene is shown.
+// A new scene can start in a library folder, filed under an atlas map or place, or from an image (a Stone Wardens map).
 import { h, clear, add } from '../../core/dom.js';
 import { openModal, field, toast, pickFile, select, checkbox, segmented, confirmDialog } from '../../core/ui.js';
 import { world } from '../world.js';
@@ -12,10 +13,11 @@ import { setUi } from '../state.js';
 const BOX_W = 620, BOX_H = 440;
 const MAX_OUT = 4096;
 
-export function openSceneEditor(sceneId = null) {
+/** opts (new scenes): {name, folder, at: {map, loc?}, file: an image to start from, region: it is a region map (no grid of its own)} */
+export function openSceneEditor(sceneId = null, opts = {}) {
   const cur = sceneId ? world.d(K.scene(sceneId)) : null;
   const st = {
-    name: cur?.name || `Scene ${dmScenes().length + 1}`,
+    name: cur?.name || opts.name || `Scene ${dmScenes().length + 1}`,
     cols: cur?.cols || 30, rows: cur?.rows || 20,
     ft: cur?.grid?.ft || 5,
     color: cur?.color || '#3b3631',
@@ -111,15 +113,21 @@ export function openSceneEditor(sceneId = null) {
 
   async function pickImage() {
     const file = await pickFile('image/*');
-    if (!file) return;
+    if (file) await useFile(file);
+  }
+
+  async function useFile(file) {
     try {
       const d = await decodeImage(file);
       st.file = file;
       st.img = { w: d.w, h: d.h, url: d.img.src };
-      // a battlemap's own grid: guess squares from common sizes (70, 100, 140, 50 px)
-      const guess = [140, 128, 100, 75, 70, 64, 50].find((n) => d.w % n === 0 && d.h % n === 0 && d.w / n <= 120 && d.h / n <= 120);
+      // a battlemap's own grid: guess squares from common sizes (70, 100, 140, 50 px); a region map has none
+      const guess = opts.region ? null : [140, 128, 100, 75, 70, 64, 50].find((n) => d.w % n === 0 && d.h % n === 0 && d.w / n <= 120 && d.h / n <= 120);
       if (guess && !cur) { st.cols = Math.round(d.w / guess); st.rows = Math.round(d.h / guess); st.fit = { s: 1 / guess, x: 0, y: 0 }; toast(`Looks like ${guess} px squares: ${st.cols} × ${st.rows}. Adjust if not.`); }
-      else cover();
+      else {
+        if (opts.region && !cur) st.rows = Math.max(2, Math.round(st.cols * d.h / d.w)); // the whole map, its own shape
+        cover();
+      }
       dirty = true;
       drawSide();
       draw();
@@ -214,6 +222,7 @@ export function openSceneEditor(sceneId = null) {
     }
     const order = prev.order ?? Math.max(0, ...dmScenes().map((s) => s.order ?? 0)) + 1;
     world.dPut(K.scene(id), {
+      ...(cur ? {} : { folder: opts.folder || null, at: opts.at || null }),
       ...prev, id, name: st.name.trim() || 'Scene', cols: st.cols, rows: st.rows, color: st.color, order,
       grid: { size: 100, ft: st.ft, show: st.grid.show, players: st.grid.players, color: st.grid.color || null, opacity: st.grid.opacity },
       light: st.light, fogOn: st.fogOn, map, updated: Date.now(),
@@ -227,6 +236,7 @@ export function openSceneEditor(sceneId = null) {
   drawSide();
   draw();
   if (st.srcMedia) loadImage(st.srcMedia);
+  if (!cur && opts.file) useFile(opts.file);
   openModal({
     title: cur ? `Edit ${cur.name}` : 'New scene',
     wide: true,

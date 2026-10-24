@@ -16,12 +16,15 @@ const items = new Set();
 export function startProjector() {
   stopProjector();
   unsub = world.on((p) => {
+    let any = false;
     for (const k of p.dm) {
+      if (k.startsWith('folder.') || k === 'recent') continue; // the map library: nothing players see
+      any = true;
       if (k.startsWith('item.')) items.add(keyTail(k));
       else full = true;
     }
     if (p.structural) full = true; // a room joined or a relay came back (not a redraw of this screen)
-    if (p.dm.size || p.structural) schedule();
+    if (any || p.structural) schedule();
   });
   unsubMsg = world.bus.on((ev) => { if (ev.type === 'msg' && ev.room === 'table' && ev.channel === 'req') handleRequest(ev); });
   full = true;

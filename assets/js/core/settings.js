@@ -21,6 +21,10 @@ const DEFAULTS = {
   placeHidden: true, // DM: creatures placed on a scene start hidden from players
   dmPreview: false, // DM: show the board as the players see it
   fogPanelMin: false, // DM: the fog controls folded to their title
+  scenesWide: false, // DM: the Scenes panel opened out into the whole map library
+  libNode: 'root', // DM: what the library shows: 'pinned' | 'recent' | 'all' | 'root' (My maps) | 'f:<folder>' | 'm:<map>' | 'p:<place>'
+  libOpen: { root: true, 'm:main': true }, // DM: folders and atlas maps unfolded in the library's tree
+  libSort: 'manual', // DM: scenes in a folder: 'manual' (dragged order) | 'name'
 };
 
 let cache = null;

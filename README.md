@@ -17,7 +17,21 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
 
 ## What the DM can do
 
-- **Scenes** (Scenes panel): any number of maps. *New scene* sets the size in squares, feet per square, background
+- **Scenes** (Scenes panel) open in two stages. The **short list** shows your **pinned** maps (in the order you drag
+  them to), then the **recent** ones, the live scene always among them, and a quick *Find a scene* search. **All maps**
+  (or *Browse all maps*, or the scene name at the top) opens the **library** out over the board: a tree on the left
+  with Pinned, Recent, All scenes, **My maps** (your own folders, nested as deep as you like) and the **Stone Wardens
+  atlas** (its main map, the maps inside it and their places, as on the Stone Wardens map), and the chosen folder,
+  map or place on the right as picture cards. Organize it like a file system: *New folder* (named in place;
+  double-click a folder in the tree to rename it), drag scenes onto a folder, drag a folder into another (or above /
+  below one in the tree to reorder), drag scenes onto Pinned to pin them, onto a Stone Wardens map or place to file
+  them there (holding a drag over a folded row unfolds it). Ctrl+click or Shift+click selects several scenes to move,
+  pin, file or delete together. Folders take a color; deleting a folder moves what was in it up a level (no scene is
+  deleted). Every ⋯ menu does the same without dragging (touch screens). A Stone Wardens map offers **New scene from
+  this map** (its picture, cropped and scaled like any upload); a place offers *New scene here* and links back to
+  Stone Wardens. Search finds scenes, folders and places. Opening a scene, or Esc, folds the library back. All of it
+  is the DM's: players never receive folders, pins or places, and Ctrl+Z undoes every move.
+- **Making a scene:** *New scene* sets the size in squares, feet per square, background
   and grid, and places an uploaded image on that grid: drag to move it, wheel or slider to scale it, *Fill* /
   *Fit whole image* / *Match shape*, or *Image pixels per square* to line up a battlemap's own grid. Whatever lies
   outside the frame is cropped. View and prepare any scene in secret; **Show this scene** makes it live. The DM bar

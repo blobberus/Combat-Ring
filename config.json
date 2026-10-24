@@ -2,6 +2,8 @@
   "dataRoot": "content/combat-ring/",
   "characters": "content/characters/",
   "locations": "content/locations/",
+  "maps": "content/maps/",
+  "mainMap": "content/map/config.json",
   "species": ["srd/species.json", "srd/stubs/species.json"],
   "customSpecies": "content/library/species/",
   "vaults": [

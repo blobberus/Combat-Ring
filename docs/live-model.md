@@ -51,7 +51,12 @@ Table room (players read; `world.t`):
 
 DM room (`world.d`): `dmeta` (live scene, banner with show flags, curtain, turn, presenting, `unlocked[scene][char]`),
 `scene.<id>` (all scenes; `fogColor` black / white), `fog.<scene>.<shape>` (with `on`), `item.<id>` (creatures, props, notes; with `hidden`, stats, HP),
-`cre.<id>` (custom creatures), `cprop.<id>` (custom props), `media.<id>` (image registry), `deck.<id>` (slideshows).
+`cre.<id>` (custom creatures), `cprop.<id>` (custom props), `media.<id>` (image registry), `deck.<id>` (slideshows),
+and the map library (`ring/library.js`): `folder.<id>` (`{name, parent, order, color}`; folders nest to any depth,
+unknown or cyclic parents count as top level), `recent` (`{ids}`, the last 12 scenes the DM stayed on), and on each
+scene `folder`, `pin` (sort key while pinned) and `at` (`{map, loc?}`: the Stone Wardens map or place it is filed
+under, read from `content/maps/`, `content/map/config.json` and `content/locations/`). `project()` copies none of
+it, and the projector doesn't re-project for `folder.*` / `recent` changes.
 
 ## The projection (`ring/model.js` `project`, `ring/projector.js`)
 
