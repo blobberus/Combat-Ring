@@ -74,14 +74,14 @@
 .rg-fog-fill { fill: var(--fog); }
 .rg-board.is-dm .rg-fog-fill { fill: var(--fog-dm); }
 .rg-board.is-dm .rg-fog[data-color="white"] .rg-fog-fill { fill: rgb(236 232 222 / 0.62); }
-.rg-fog-soft { pointer-events: none; }
+.rg-fog-soft { pointer-events: none; max-width: none; } /* it reaches past the map edges: base.css's max-width squeezed it */
 .rg-fog-edge { fill: none; stroke-width: 1.5; stroke-dasharray: 6 4; }
 .rg-fog-edge.is-hide { stroke: var(--gold); }
 .rg-fog-edge.is-reveal { stroke: var(--link); }
 .rg-fog-edge.is-off { stroke: var(--ink-faint); stroke-dasharray: 2 4; opacity: 0.7; }
 /* the area a click would reveal / hide (or erase) */
 .rg-fog-edge.is-sel { stroke: var(--gold); stroke-width: 3; stroke-dasharray: none; fill: color-mix(in srgb, var(--gold) 14%, transparent); }
-.rg-fog-edge.is-sel.is-erase { stroke: var(--danger); fill: color-mix(in srgb, var(--danger) 16%, transparent); }
+.rg-fog-edge.is-picked { stroke: var(--gold); stroke-width: 3; stroke-dasharray: none; fill: color-mix(in srgb, var(--gold) 26%, transparent); }
 .rg-board[data-tool="fog"] .rg-fog-edge { opacity: 1; }
 
 /* ---------- Tokens --------------------------------------------------------- */
@@ -334,6 +334,9 @@
 .rg-sub-btn.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .rg-sub-btn .icon { width: 18px; height: 18px; color: currentColor; }
 .rg-sub-hint { padding: 6px 8px 2px; font: 400 var(--text-xs) / 1.4 var(--font-ui); color: var(--ink-muted); }
+.rg-sub-pick { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 2px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.rg-sub-pick .row { gap: 4px; flex-wrap: wrap; }
+.rg-sub-pick .btn { padding: 0 8px; }
 
 .rg-zoom {
   left: var(--space-3); bottom: var(--space-3);

@@ -2,7 +2,7 @@
 // interaction notes and placement. Each 'down' may return a drag session {move, up, cancel}.
 import { world, me } from './world.js';
 import { ui, setUi, select, toggleSelect, clearSelection, parseKey } from './state.js';
-import { simplify, pointInPolygon, rectPts, distanceFt, sizeCells, sortShapes, polygonArea, snapPoint, cellPx } from './model.js';
+import { simplify, rectPts, distanceFt, sizeCells, sortShapes, polygonArea, snapPoint, cellPx, inArea, polysOverlap } from './model.js';
 import { getSetting } from '../core/settings.js';
 import { toast } from '../core/ui.js';
 import * as A from './actions.js';
@@ -28,10 +28,18 @@ function targetKey(target) {
   return el?.dataset.key || null;
 }
 
+/** The fog area at a point (one layer: at most one), revealed ones included. */
 function fogAt(pt) {
   if (!current?.fog) return null;
-  const shapes = sortShapes(current.fog).reverse();
-  return shapes.find((s) => pointInPolygon(pt.x, pt.y, s.pts))?.id || null;
+  return sortShapes(current.fog).reverse().find((s) => inArea(pt.x, pt.y, s))?.id || null;
+}
+
+/** Select fog: pick areas (Shift adds or removes), then delete, reveal or hide them from the fog controls or keys. */
+function pickFog(ids, add) {
+  const next = add ? new Set(ui.fogPicked) : new Set();
+  for (const id of ids) if (add && next.has(id) && ids.length === 1) next.delete(id); else next.add(id);
+  setUi({ fogPicked: next });
+  world.invalidate('view');
 }
 
 function sceneScale(board) { return board.scale || 1; }
@@ -229,10 +237,27 @@ let poly = null;
 function fogDown(pt, e, board) {
   const shape = ui.fogShape;
   const mode = e.altKey ? (ui.fogMode === 'hide' ? 'reveal' : 'hide') : ui.fogMode;
-  if (shape === 'erase' || shape === 'toggle') {
+  if (shape === 'toggle') {
     const id = fogAt(pt);
-    if (id) shape === 'erase' ? A.deleteFog(id) : A.toggleFog(id);
+    if (id) A.toggleFog(id);
     return null;
+  }
+  if (shape === 'select') { // click an area, or drag a box over several
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    let moved = false;
+    return {
+      move(p) {
+        moved ||= Math.hypot(p.x - pt.x, p.y - pt.y) * sceneScale(board) > 5;
+        if (moved) board.setOverlay('fog', { kind: 'box', x0: pt.x, y0: pt.y, x1: p.x, y1: p.y, mode: 'select' });
+      },
+      up(p) {
+        board.setOverlay('fog', null);
+        if (!moved) { const id = fogAt(pt); if (id) pickFog([id], add); else if (!add) pickFog([], false); return; }
+        const box = rectPts(Math.min(pt.x, p.x), Math.min(pt.y, p.y), Math.max(pt.x, p.x), Math.max(pt.y, p.y));
+        pickFog((current.fog || []).filter((s) => polysOverlap(s.pts, box)).map((s) => s.id), add);
+      },
+      cancel() { board.setOverlay('fog', null); },
+    };
   }
   // with Lasso or Rectangle, a drag draws and a click (no drag) on fog reveals it, or hides it again
   const clicked = (p) => Math.hypot(p.x - pt.x, p.y - pt.y) * sceneScale(board) < 5;
@@ -326,8 +351,9 @@ function placeDown(pt, e) {
   if (p.kind === 'creature') key = A.placeCreature(p.src, pt.x, pt.y);
   else if (p.kind === 'prop') key = A.placeProp(p.src, pt.x, pt.y);
   else if (p.kind === 'pc') key = A.placePc(p.charId, pt.x, pt.y);
-  if (key) select(key);
-  if (!e.shiftKey || p.kind === 'pc') { setUi({ placing: null }); hooks.afterPlace?.(); }
+  const more = e.shiftKey && p.kind !== 'pc'; // Shift-click places more: no menu popping up over the next spot
+  if (key && !more) select(key);
+  if (!more) { setUi({ placing: null }); hooks.afterPlace?.(); }
   world.invalidate('view');
   return null;
 }

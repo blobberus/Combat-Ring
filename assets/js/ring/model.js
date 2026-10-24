@@ -184,19 +184,117 @@ export function pathD(pts) {
 }
 
 // ---------- fog ----------
-// A shape is {pts, mode: 'hide'|'reveal', on (default true), z}. Shapes apply in z order: a 'hide' shape covers, a
-// 'reveal' shape cuts a hole in what came before it. A point is fogged when the last active shape containing it hides.
+// One layer: a fog area is {pts, holes: [pts, …], on, z, flat: true}. Drawing a new area (or a clearing) cuts itself out
+// of the areas it overlaps (cutFog), so areas never overlap and every spot belongs to at most one; deleting an area
+// leaves no fog there. on: false = revealed to the players (the DM still sees it, to hide it again).
+// Older saves stacked shapes ({pts, mode: 'hide'|'reveal', on, z}, the newest winning): flattenFog makes them one layer.
 
 export const sortShapes = (shapes) => [...shapes].sort((a, b) => (a.z || 0) - (b.z || 0));
 
+const valid = (s) => !!s?.pts && s.pts.length >= 6;
+/** Is the point inside the area (its outline, not one of its holes)? */
+export const inArea = (x, y, s) => pointInPolygon(x, y, s.pts) && !(s.holes || []).some((h) => pointInPolygon(x, y, h));
+
+/** Under fog the players can't see? shapes: one layer (oneLayer). */
 export function fogged(x, y, shapes) {
-  let hidden = false;
-  for (const s of shapes) {
-    if (s.on === false || !s.pts || s.pts.length < 6) continue;
-    if (pointInPolygon(x, y, s.pts)) hidden = s.mode !== 'reveal';
-  }
-  return hidden;
+  return shapes.some((s) => s.on !== false && s.mode !== 'reveal' && valid(s) && inArea(x, y, s));
 }
+
+export function bbox(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < pts.length; i += 2) {
+    if (pts[i] < x0) x0 = pts[i];
+    if (pts[i] > x1) x1 = pts[i];
+    if (pts[i + 1] < y0) y0 = pts[i + 1];
+    if (pts[i + 1] > y1) y1 = pts[i + 1];
+  }
+  return [x0, y0, x1, y1];
+}
+const boxesMeet = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+const orient = (ax, ay, bx, by, cx, cy) => Math.sign((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+
+/** Does any edge of polygon a cross an edge of polygon b? */
+function edgesCross(a, b) {
+  const na = a.length / 2, nb = b.length / 2;
+  const bb = bbox(b);
+  for (let i = 0, j = na - 1; i < na; j = i++) {
+    const ax = a[j * 2], ay = a[j * 2 + 1], bx = a[i * 2], by = a[i * 2 + 1];
+    if (Math.max(ax, bx) < bb[0] || Math.min(ax, bx) > bb[2] || Math.max(ay, by) < bb[1] || Math.min(ay, by) > bb[3]) continue;
+    for (let k = 0, l = nb - 1; k < nb; l = k++) {
+      const cx = b[l * 2], cy = b[l * 2 + 1], dx = b[k * 2], dy = b[k * 2 + 1];
+      if (Math.max(cx, dx) < Math.min(ax, bx) || Math.min(cx, dx) > Math.max(ax, bx) || Math.max(cy, dy) < Math.min(ay, by) || Math.min(cy, dy) > Math.max(ay, by)) continue;
+      const o1 = orient(ax, ay, bx, by, cx, cy), o2 = orient(ax, ay, bx, by, dx, dy), o3 = orient(cx, cy, dx, dy, ax, ay), o4 = orient(cx, cy, dx, dy, bx, by);
+      if (o1 !== o2 && o3 !== o4 && o1 && o2 && o3 && o4) return true;
+    }
+  }
+  return false;
+}
+
+/** Do two polygons share any area? */
+export function polysOverlap(a, b) {
+  if (!boxesMeet(bbox(a), bbox(b))) return false;
+  return pointInPolygon(a[0], a[1], b) || pointInPolygon(b[0], b[1], a) || edgesCross(a, b);
+}
+
+/** Is polygon a wholly inside polygon b? */
+export function polyInside(a, b) {
+  const ba = bbox(a), bb = bbox(b);
+  if (ba[0] < bb[0] || ba[1] < bb[1] || ba[2] > bb[2] || ba[3] > bb[3]) return false;
+  for (let i = 0; i < a.length; i += 2) if (!pointInPolygon(a[i], a[i + 1], b)) return false;
+  return !edgesCross(a, b);
+}
+
+/** Has an area been cut away to nothing? (sampled: what is left is too small to matter) */
+function areaGone(s) {
+  const [x0, y0, x1, y1] = bbox(s.pts);
+  const n = 24;
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+    if (inArea(x0 + ((a + 0.5) * (x1 - x0)) / n, y0 + ((b + 0.5) * (y1 - y0)) / n, s)) return false;
+  }
+  return true;
+}
+
+// An area is one bus object (brokers keep at most ~100 KB each): holes inside a newer hole go, and an area cut very
+// many times has its holes simplified until it fits.
+const FOG_BYTES = 40000;
+function addHole(holes, cutter) {
+  let out = [...holes.filter((h) => !polyInside(h, cutter)), cutter];
+  for (let tol = 2; JSON.stringify(out).length > FOG_BYTES && tol <= 64; tol *= 2) out = out.map((h) => simplify(h, tol)).filter((h) => h.length >= 6);
+  return out;
+}
+
+/** Cut a polygon (a new area or a clearing) out of the areas: [[id, area | null (gone)]] for the ones it changes. */
+export function cutFog(shapes, cutter) {
+  const out = [];
+  for (const s of shapes) {
+    if (!valid(s) || !polysOverlap(s.pts, cutter)) continue;
+    if (polyInside(s.pts, cutter)) { out.push([s.id, null]); continue; }
+    if ((s.holes || []).some((h) => polyInside(cutter, h))) continue; // already clear there
+    const next = { ...s, holes: addHole(s.holes || [], cutter) };
+    out.push([s.id, areaGone(next) ? null : next]);
+  }
+  return out;
+}
+
+/** Older, stacked shapes as one layer (newer shapes cut older ones; clearings only cut). Keeps ids, drops what is gone. */
+export function flattenFog(shapes) {
+  const list = sortShapes(shapes.filter(valid));
+  const out = [];
+  list.forEach((s, i) => {
+    if (s.mode === 'reveal') return;
+    const cur = { ...s, mode: undefined, holes: [...(s.holes || [])], on: s.on !== false, flat: true };
+    for (const n of list.slice(i + 1)) {
+      if (!polysOverlap(cur.pts, n.pts)) continue;
+      if (polyInside(cur.pts, n.pts)) return;
+      if (!cur.holes.some((h) => h === n.pts || JSON.stringify(h) === JSON.stringify(n.pts))) cur.holes.push(n.pts);
+    }
+    if (!areaGone(cur)) out.push(cur);
+  });
+  return out;
+}
+
+/** The areas as one layer, oldest first (flattened when they are an older save's stack). */
+export const oneLayer = (shapes) => (shapes.every((s) => s?.flat) ? sortShapes(shapes.filter(valid)) : flattenFog(shapes));
 
 // ---------- initiative ----------
 
@@ -414,7 +512,7 @@ export function project(dm) {
     const s = get(K.scene(live));
     const { w, h } = sceneSize(s);
     const fogPre = `fog.${live}.`;
-    const fogShapes = sortShapes(all.filter(([k, v]) => v && k.startsWith(fogPre)).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
+    const fogShapes = oneLayer(all.filter(([k, v]) => v && k.startsWith(fogPre)).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
     const fogOn = s.fogOn !== false;
     out.set(K.scene(live), {
       id: live, name: s.name || 'Scene', cols: s.cols, rows: s.rows, w, h, color: s.color || null,
@@ -425,8 +523,8 @@ export function project(dm) {
     });
     if (fogOn) {
       for (const sh of fogShapes) {
-        if (sh.on === false) continue;
-        out.set(K.fog(live, sh.id), { pts: sh.pts, mode: sh.mode === 'reveal' ? 'reveal' : 'hide', z: sh.z || 0 });
+        if (sh.on === false) continue; // revealed: nothing to send
+        out.set(K.fog(live, sh.id), { pts: sh.pts, holes: sh.holes || [], z: sh.z || 0, flat: true });
       }
     }
     const items = all.filter(([k, v]) => v && k.startsWith('item.') && v.scene === live);

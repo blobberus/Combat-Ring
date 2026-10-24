@@ -78,6 +78,11 @@ the SW sheets), `library.js` (the DM's map library: folders, pins, recent, the S
 - The board holds pointer capture during presses: find targets with `elementFromPoint`, not `e.target`, in
   click/dblclick handlers.
 - UI state that must not sync (tool, selection, viewing scene) lives in `state.js`; per-device prefs in settings.
+- Fog is one layer (`model.js`: `cutFog`, `flattenFog`, `oneLayer`, `inArea`): never stack shapes; read fog through
+  `oneLayer` (older saves are stacks). What a player can't see (other PCs under fog; in dark scenes anything outside
+  light and their darkvision) is dropped in `view.js` (`unseen`), so it is neither drawn nor hoverable. A light source
+  is `{bright, dim}` (feet); a viewer's sight is `{sight: true, darkvision, fade, …}` (`fade` is a percent): keep the
+  two apart (a sight's old `dim` field was once read as a 25 ft light).
 - Redraws (players' moves arrive many times a second): `world.on` changes carry `moved` (`room:key` of
   position-only changes; panels' `hasChanges` and the token menu ignore them), `structural` (a room joined: the
   projector re-projects; it ignores `'#'`) and `view`. Use `world.invalidate('view')` for board-only redraws (hover,
@@ -95,5 +100,6 @@ the SW sheets), `library.js` (the DM's map library: folders, pins, recent, the S
 Built and QA'd in headless Chrome (sandbox: DM setup and login, scenes with uploaded maps, fog, bestiary, custom
 creatures, props, interactions, light and darkvision, initiative, pins, banner, slideshow, token art, undo, reload,
 backups; real mode: the shared password opens SW's vault and loads the real party). Known gaps: fog is visual on top
-of a public map image once a scene is shown (players could fetch the image); `hello` presence names are self-reported;
+of a public map image once a scene is shown (players could fetch the image); creatures in the dark (not under fog)
+still reach players' browsers, only undrawn; `hello` presence names are self-reported;
 no dice roller; no walls / dynamic line of sight.

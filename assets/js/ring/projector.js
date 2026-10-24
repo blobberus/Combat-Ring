@@ -3,7 +3,7 @@
 // item); anything else re-projects everything. Images the live scene or slideshow needs get a public copy first.
 // It also applies players' requests that need the DM's state (moving a prop the DM marked movable).
 import { world } from './world.js';
-import { project, diffProjection, publicItem, projectItemMedia, initiativeEntry, makeMediaRef, sortShapes, K, keyTail } from './model.js';
+import { project, diffProjection, publicItem, projectItemMedia, initiativeEntry, makeMediaRef, oneLayer, K, keyTail } from './model.js';
 import { publishMedia } from './media.js';
 import { toast } from '../core/ui.js';
 
@@ -62,7 +62,7 @@ function run() {
   const scene = live ? get(K.scene(live)) : null;
   const fogOn = scene?.fogOn !== false;
   const fogPre = `fog.${live}.`;
-  const shapes = live ? sortShapes([...dm.entries()].filter(([k]) => k.startsWith(fogPre)).map(([, v]) => v)) : [];
+  const shapes = live ? oneLayer([...dm.entries()].filter(([k, v]) => v && k.startsWith(fogPre)).map(([, v]) => v)) : [];
   const mediaRef = makeMediaRef(get);
   const changes = [];
   for (const id of items) {

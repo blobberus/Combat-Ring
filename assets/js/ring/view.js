@@ -5,7 +5,7 @@ import { getSetting } from '../core/settings.js';
 import { world, me } from './world.js';
 import { ui, viewKey } from './state.js';
 import { party, pcProfile } from './characters.js';
-import { project, sceneSize, fogged, sortShapes, healthState, K, keyTail, sizeCells } from './model.js';
+import { project, sceneSize, fogged, oneLayer, healthState, K, keyTail, sizeCells, cellPx, ftToPx } from './model.js';
 import { propById } from './props.js';
 
 export function dmScenes() {
@@ -136,9 +136,40 @@ function lightSources(tokens, scene, viewerChars, role) {
     const sees = role === 'dm' ? false : shared || viewerChars.includes(t.charId);
     if (!sees) continue;
     const v = t.profile.vision;
-    out.push({ x: t.x, y: t.y, darkvision: t.profile.darkvision, soft: v.soft, gray: v.gray, dim: v.dim, tint: v.tint, tintStrength: v.tintStrength, self: true });
+    // a viewer's own sight (not a light: `fade` is how dim their darkvision looks, in percent)
+    out.push({ x: t.x, y: t.y, sight: true, darkvision: t.profile.darkvision, soft: v.soft, gray: v.gray, fade: v.dim, tint: v.tint, tintStrength: v.tintStrength });
   }
   return out;
+}
+
+/**
+ * What a player can't see is not drawn at all (no picture, no name on hover, no range rings): other characters under
+ * fog (creatures and props under fog never reach the players), and in a dark scene everything outside the light and
+ * the viewers' darkvision. Their own characters always show (with shared party vision, the whole party).
+ * v.light holds the lights of every token, seen or not.
+ */
+function unseen(v, viewers) {
+  const fog = v.scene.fogOn === false ? [] : v.fog;
+  const dark = (v.scene.light?.level || 'bright') === 'dark' && v.light;
+  const c = cellPx(v.scene);
+  const sight = dark ? v.light.map((src) => ({ x: src.x, y: src.y, r: ftToPx(src.sight ? src.darkvision || 0 : (src.bright || 0) + (src.dim || 0), v.scene) })).filter((src) => src.r > 0) : null;
+  const party = !!v.scene.light?.shared; // shared party vision: the party sees each other
+  return (t) => {
+    if (t.kind === 'pc' && (party || viewers.includes(t.charId))) return false;
+    if (fog.length && fogged(t.x, t.y, fog)) return true;
+    if (!sight) return false;
+    const slack = (sizeCells(t.w) * c) / 4; // a big creature shows once part of it is in sight
+    return !sight.some((src) => Math.hypot(t.x - src.x, t.y - src.y) <= src.r + slack);
+  };
+}
+
+/** Players' tokens, rings and lights: lights from every token, then only what they can see is drawn. */
+function playerSight(v, tokens, viewers) {
+  v.light = lightSources(tokens, v.scene, viewers, 'player');
+  const hide = unseen(v, viewers);
+  v.tokens = tokens.filter((t) => !hide(t));
+  v.rings = ringsFor(v.tokens);
+  return v;
 }
 
 function waiting(title, text) {
@@ -191,14 +222,11 @@ function buildPlayer() {
   if (!meta) return { role: 'player', emptyContent: waiting('The ring is quiet', 'Waiting for the DM to set the table.') };
   if (meta.blackout) return { role: 'player', emptyContent: curtain() };
   if (!scene) return { role: 'player', emptyContent: waiting('No scene yet', 'When the DM shows a map, it appears here.') };
-  const fog = sortShapes(world.tList(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
+  const fog = oneLayer(world.tList(`fog.${sceneId}.`).filter(([, v]) => v).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
   const { tokens, marks } = publicTokens((k) => world.t(k), (p) => world.tList(p), sceneId, 'player');
   tokens.push(...pcTokens(sceneId, 'player'));
   marks.push(...pinMarks(sceneId, 'player'));
-  const v = { role: 'player', sceneId, scene: { ...scene, w: scene.w, h: scene.h }, map: scene.map, fog, tokens, marks };
-  v.rings = ringsFor(tokens);
-  v.light = lightSources(tokens, scene, me.chars(), 'player');
-  return v;
+  return playerSight({ role: 'player', sceneId, scene: { ...scene, w: scene.w, h: scene.h }, map: scene.map, fog, marks }, tokens, me.chars());
 }
 
 // The player view projects the DM's whole state; that is done again only when the DM's state changed (players'
@@ -224,24 +252,21 @@ function buildPreview() {
   const scene = pub.get(K.scene(sceneId));
   const get = (k) => pub.get(k) ?? null;
   const list = (prefix) => [...pub.entries()].filter(([k]) => k.startsWith(prefix));
-  const fog = sortShapes(list(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
+  const fog = oneLayer(list(`fog.${sceneId}.`).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) })));
   const { tokens, marks } = publicTokens(get, list, sceneId, 'player');
   tokens.push(...pcTokens(sceneId, 'player'));
   marks.push(...pinMarks(sceneId, 'player'));
   let map = scene.map;
   if (map?.pending) map = world.d(K.scene(sceneId))?.map?.media || null; // the DM can see the sealed image
-  const v = { role: 'player', preview: true, sceneId, scene, map, fog, tokens, marks };
-  v.rings = ringsFor(tokens);
   const viewers = ui.previewChar ? [ui.previewChar] : party.all().map((c) => c.id);
-  v.light = lightSources(tokens, scene.light?.level ? scene : { ...scene, light: { level: 'bright' } }, viewers, 'player');
-  return v;
+  return playerSight({ role: 'player', preview: true, sceneId, scene: scene.light?.level ? scene : { ...scene, light: { level: 'bright' } }, map, fog, marks }, tokens, viewers);
 }
 
 // "Is this spot under fog?" remembered per spot until the fog changes (the DM's board asks it for every item on
 // every redraw).
 let fogMemo = { sig: '', at: new Map() };
 function fogTest(shapes) {
-  const sig = shapes.map((s) => `${s.id}:${s.z}:${s.mode}:${s.pts?.length}:${s.pts?.[0]},${s.pts?.[1]}`).join(';');
+  const sig = shapes.map((s) => `${s.id}:${s.z}:${s.on}:${s.pts?.length}:${s.pts?.[0]},${s.pts?.[1]}:${s.holes?.length || 0}`).join(';');
   if (sig !== fogMemo.sig) fogMemo = { sig, at: new Map() };
   return (x, y) => {
     const k = `${x},${y}`;
@@ -258,7 +283,7 @@ function buildDm() {
   const { w, h: hh } = sceneSize(s);
   const scene = { ...s, w, h: hh, grid: { size: s.grid?.size || 100, ft: s.grid?.ft || 5, show: s.grid?.show !== false, color: s.grid?.color, opacity: s.grid?.opacity ?? 0.35 }, light: s.light || { level: 'bright' }, fogOn: s.fogOn !== false };
   const fogPre = `fog.${sceneId}.`;
-  const fog = sortShapes(world.dList(fogPre).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
+  const fog = oneLayer(world.dList(fogPre).filter(([, v]) => v).map(([k, v]) => ({ ...v, id: k.slice(fogPre.length) })));
   const activeFog = fog.filter((f) => f.on !== false);
   const underFog = fogTest(activeFog);
   const tokens = [];
@@ -285,7 +310,7 @@ function buildDm() {
   }
   tokens.push(...pcTokens(sceneId, 'dm'));
   marks.push(...pinMarks(sceneId, 'dm'));
-  const v = { role: 'dm', sceneId, scene, map: s.map?.media || s.map?.url || null, fog, fogSel: ui.fogSel, fogErase: ui.fogShape === 'erase', tokens, marks, live: world.d('dmeta')?.live === sceneId };
+  const v = { role: 'dm', sceneId, scene, map: s.map?.media || s.map?.url || null, fog, fogSel: ui.fogSel, fogPicked: ui.fogShape === 'select' ? [...ui.fogPicked] : [], tokens, marks, live: world.d('dmeta')?.live === sceneId };
   v.rings = ringsFor(tokens);
   v.light = lightSources(tokens, scene, [], 'dm');
   return v;

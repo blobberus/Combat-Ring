@@ -57,7 +57,7 @@ export default {
     add(el, h('section', { class: 'cr-sec stack stack-sm' },
       h('h3', { class: 'cr-sec-title' }, s.name || 'Scene'),
       field('Light', segmented(LIGHT_LEVELS.map((l) => ({ value: l.id, label: l.label })), s.light?.level || 'bright', (v) => set({ light: { ...(s.light || {}), level: v } }, 'light')),
-        s.light?.level === 'dark' ? 'Players see only their darkvision (in fading gray) and light sources.' : s.light?.level === 'dim' ? 'Everything beyond darkvision and light is darker.' : 'Everyone sees the whole revealed map.'),
+        s.light?.level === 'dark' ? 'Players see only what light and their darkvision reach; the rest is black, creatures and other characters included.' : s.light?.level === 'dim' ? 'Everything beyond darkvision and light is darker, but players still see what is there.' : 'Everyone sees the whole revealed map.'),
       checkbox(!!s.light?.shared, (v) => set({ light: { ...(s.light || {}), shared: v } }, 'shared vision'), 'Shared party vision'),
       checkbox(s.fogOn !== false, (v) => set({ fogOn: v }, 'fog'), 'Fog of war'),
       checkbox(s.grid?.show !== false, (v) => set({ grid: { ...(s.grid || {}), show: v } }, 'grid'), 'Show the grid'),

@@ -37,10 +37,15 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   outside the frame is cropped. View and prepare any scene in secret; **Show this scene** makes it live. The DM bar
   always says what the players see (green dot: a scene; amber: hidden). **Hide from players** (DM bar, the live
   scene's row in Scenes, or Shift+H) lowers the curtain over the live scene until you show it again.
-- **Fog of war** (F): drag to draw fog with the lasso, polygon or rectangle (or a *Clearing*, a hole in fog; Alt
-  flips it), then **click a fog area to reveal it** to the players and click again to hide it. Cover the whole map,
-  reveal or hide everything, erase areas. Players see opaque **black or white fog** (per scene) with soft, misty
-  edges, and don't receive creatures or props under fog at all. The fog controls fold to a small tab (the tool stays
+- **Fog of war** (F): drag to draw fog with the lasso, polygon or rectangle (or a *Clearing*, which cuts fog away;
+  Alt flips it), then **click a fog area to reveal it** to the players and click again to hide it. Fog is **one
+  layer**: new fog replaces whatever fog it overlaps, so every spot belongs to one area and revealing an area never
+  leaves older fog showing under it. **Select** (in the fog controls): click a fog area, Shift+click for more, or drag
+  a box over several, then **Delete** (or Del) removes them and leaves no fog there; *Reveal* / *Hide* work on the
+  selection too. Cover the whole map, reveal or hide everything. Players see opaque **black or white fog** (per
+  scene) with soft, misty edges and nothing under it: creatures and props under fog never reach them, and other
+  players' characters there aren't drawn. Older scenes' stacked fog becomes one layer the first time the DM opens
+  them. The fog controls fold to a small tab (the tool stays
   on).
 - **Characters are locked:** only the DM places, moves, resizes or removes the party's tokens, until the DM unlocks
   a character for its player on that scene (its token menu, or the lock buttons and *Unlock all* in Party). New
@@ -87,9 +92,11 @@ Owlbear Rodeo, dressed like the [Stone Wardens site](https://blobberus.github.io
   screen within a few seconds (the DM's browser checks for new sheet commits every 4 s and shares them). The numbers
   are worked out with Stone Wardens' own rules, so Exhaustion slows the Move circle and Grappled stops it, as the
   sheet shows.
-- **Darkvision:** in dim or dark scenes the board darkens beyond what they can see; darkvision (from the sheet;
-  Truesight counts too) shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
-  Light sources (torches, campfires) light the dark for everyone.
+- **Darkness:** in a **dark** scene a player sees only what light (torches, campfires, a light they carry) and their
+  character's darkvision reach. Everything else is pitch black: the map, and creatures, props and other characters
+  there aren't drawn at all (no name on hover either); their own characters always show. In a **dim** scene the
+  board is darker beyond their sight, but what is there shows. Darkvision (from the sheet; Truesight counts too)
+  shows a faded, grayer view whose edge softness, gray, dimness and tint each player sets.
 - **Token art:** upload any image and crop it into a circle; otherwise the sheet's portrait or initials.
 - **Size:** Tiny to Gargantuan, or Custom (any number of squares across), in the token menu or *Customize*.
 - **Health bar:** they and the DM always see their numbers; the other players see the bar with HP, the bar only, or

@@ -38,16 +38,52 @@ test('point in polygon', () => {
   assert.ok(!M.pointInPolygon(90, 90, tri));
 });
 
-test('fog layers apply in order', () => {
-  const cover = { pts: M.rectPts(0, 0, 1000, 1000), mode: 'hide', z: 1 };
-  const hole = { pts: M.rectPts(100, 100, 300, 300), mode: 'reveal', z: 2 };
-  const recover = { pts: M.rectPts(200, 200, 250, 250), mode: 'hide', z: 3 };
-  const shapes = M.sortShapes([recover, hole, cover]);
-  assert.ok(M.fogged(50, 50, shapes));
-  assert.ok(!M.fogged(150, 150, shapes));
-  assert.ok(M.fogged(225, 225, shapes));
-  assert.ok(!M.fogged(50, 50, shapes.map((s) => (s === cover ? { ...s, on: false } : s))));
-  assert.ok(!M.fogged(5000, 5000, shapes));
+test('older stacked fog becomes one layer', () => {
+  const cover = { id: 'a', pts: M.rectPts(0, 0, 1000, 1000), mode: 'hide', z: 1 };
+  const hole = { id: 'b', pts: M.rectPts(100, 100, 300, 300), mode: 'reveal', z: 2 };
+  const recover = { id: 'c', pts: M.rectPts(200, 200, 250, 250), mode: 'hide', z: 3 };
+  const flat = M.oneLayer([recover, hole, cover]);
+  assert.deepEqual(flat.map((s) => s.id), ['a', 'c']); // the clearing only cut
+  assert.ok(flat.every((s) => s.flat && s.mode === undefined));
+  assert.ok(M.fogged(50, 50, flat));
+  assert.ok(!M.fogged(150, 150, flat));
+  assert.ok(M.fogged(225, 225, flat));
+  assert.ok(!M.fogged(5000, 5000, flat));
+  // revealing the big area reveals it all: nothing older shows through
+  assert.ok(!M.fogged(50, 50, flat.map((s) => (s.id === 'a' ? { ...s, on: false } : s))));
+  // a newer area wholly over an older one replaces it
+  const gone = M.oneLayer([{ id: 'x', pts: M.rectPts(10, 10, 20, 20), z: 1 }, { id: 'y', pts: M.rectPts(0, 0, 50, 50), z: 2 }]);
+  assert.deepEqual(gone.map((s) => s.id), ['y']);
+});
+
+test('new fog cuts the fog under it: one layer', () => {
+  const a = { id: 'a', pts: M.rectPts(0, 0, 400, 400), holes: [], on: true, z: 1, flat: true };
+  const b = M.rectPts(200, 200, 600, 600);
+  const [[id, next]] = M.cutFog([a], b);
+  assert.equal(id, 'a');
+  assert.equal(next.holes.length, 1);
+  const layer = [next, { id: 'b', pts: b, holes: [], on: false, z: 2, flat: true }];
+  assert.ok(M.fogged(100, 100, layer)); // a, outside b
+  assert.ok(!M.fogged(300, 300, layer)); // b is revealed and a doesn't show under it
+  assert.ok(!M.fogged(300, 300, [next])); // b deleted: no fog left there
+  assert.deepEqual(M.cutFog([a], M.rectPts(-10, -10, 500, 500)), [['a', null]]); // covered wholly: gone
+  assert.deepEqual(M.cutFog([a], M.rectPts(500, 500, 600, 600)), []); // apart: untouched
+  // two cuts that together cover an area remove it
+  const left = M.cutFog([a], M.rectPts(-10, -10, 210, 410))[0][1];
+  assert.deepEqual(M.cutFog([left], M.rectPts(190, -10, 410, 410)), [['a', null]]);
+  // a lasso crossing an area without containing a corner still counts as overlapping
+  assert.ok(M.polysOverlap(M.rectPts(0, 0, 100, 100), [-50, 40, 150, 40, 150, 60, -50, 60]));
+  // an area cut very many times stays small enough for the brokers (~100 KB an object)
+  let big = { id: 'big', pts: M.rectPts(0, 0, 20000, 20000), holes: [], on: true, z: 1, flat: true };
+  for (let i = 0; i < 120; i++) {
+    const cx = 500 + (i % 12) * 1600, cy = 500 + Math.floor(i / 12) * 1600, ring = [];
+    for (let a = 0; a < 160; a++) ring.push(Math.round(cx + Math.cos(a / 25.46) * (300 + (a % 7) * 9)), Math.round(cy + Math.sin(a / 25.46) * (300 + (a % 5) * 11)));
+    big = M.cutFog([big], ring)[0][1];
+  }
+  assert.equal(big.holes.length, 120);
+  assert.ok(JSON.stringify(big).length < 60000, `area is ${JSON.stringify(big).length} bytes`);
+  assert.ok(M.polyInside(M.rectPts(10, 10, 20, 20), M.rectPts(0, 0, 100, 100)));
+  assert.ok(!M.polyInside(M.rectPts(10, 10, 200, 20), M.rectPts(0, 0, 100, 100)));
 });
 
 test('simplify keeps corners', () => {
@@ -228,6 +264,25 @@ test('the map library stays with the DM', () => {
   const sc = out.get('scene.s1');
   for (const k of ['folder', 'pin', 'at']) assert.equal(sc[k], undefined);
   for (const [k, v] of out) { assert.ok(!k.startsWith('folder.') && k !== 'recent'); assert.ok(!/Crypt of secrets|brinewick|Secret lair/.test(JSON.stringify(v))); }
+});
+
+test('players get one-layer fog with its holes, and nothing revealed', () => {
+  const dm = dmState();
+  dm.set('fog.s1.f1', { pts: M.rectPts(600, 0, 1000, 1000), holes: [M.rectPts(600, 0, 1000, 200)], on: true, z: 1, flat: true });
+  dm.set('fog.s1.f2', { pts: M.rectPts(0, 0, 100, 100), holes: [], on: false, z: 2, flat: true });
+  dm.set('fog.s1.f3', { pts: M.rectPts(600, 0, 1000, 200), holes: [], on: false, z: 3, flat: true });
+  dm.set('item.g5', { scene: 's1', kind: 'creature', name: 'Goblin in the revealed corner', x: 800, y: 100 });
+  const out = M.project(dm);
+  assert.deepEqual(out.get('fog.s1.f1').holes, [M.rectPts(600, 0, 1000, 200)]);
+  assert.ok(!out.has('fog.s1.f2') && !out.has('fog.s1.f3'));
+  assert.ok(out.has('it.g5')); // in the revealed part, though the older area's outline covers it
+  assert.ok(!out.has('it.g2')); // still under fog
+  // an older save's stack is flattened before anything is sent
+  const old = dmState();
+  old.set('fog.s1.f9', { pts: M.rectPts(700, 200, 800, 300), mode: 'reveal', z: 5 });
+  const o2 = M.project(old);
+  assert.ok(!o2.has('fog.s1.f9'));
+  assert.equal(o2.get('fog.s1.f1').holes.length, 1);
 });
 
 test('projection diff', () => {

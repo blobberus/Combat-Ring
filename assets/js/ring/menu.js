@@ -366,14 +366,14 @@ function propMenu(key, it) {
 function noteMenu(key, it) {
   const id = keyTail(key);
   const p = (fields, label) => A.patchItem(id, fields, label);
-  const fogs = world.dList(`fog.${it.scene}.`).map(([k, f], i) => ({ id: k.slice(`fog.${it.scene}.`.length), f, i }));
+  const fogs = world.dList(`fog.${it.scene}.`).filter(([, f]) => f).map(([k, f], i) => ({ id: k.slice(`fog.${it.scene}.`.length), f, i }));
   const linked = new Set(it.reveals || []);
   const spawns = new Set(it.spawns || []);
   const hiddenItems = world.dList('item.').filter(([k, x]) => x.scene === it.scene && x.kind !== 'note' && (x.hidden || spawns.has(keyTail(k))));
   const fogList = h('div', { class: 'rg-link-list' }, fogs.length ? fogs.map(({ id: fid, f, i }) => h('label', {
     class: 'checkbox', onpointerenter: () => { ui.fogSel = fid; world.invalidate('view'); }, onpointerleave: () => { ui.fogSel = null; world.invalidate('view'); },
   }, h('input', { type: 'checkbox', checked: linked.has(fid), onchange: (e) => p({ reveals: e.target.checked ? [...linked, fid] : [...linked].filter((x) => x !== fid) }, 'link fog') }),
-  h('span', null, `Fog ${i + 1} (${f.mode === 'reveal' ? 'reveal' : 'hide'}${f.on === false ? ', off' : ''})`))) : h('p', { class: 'muted text-xs' }, 'No fog on this scene yet.'));
+  h('span', null, `Fog area ${i + 1}${f.on === false ? ' (revealed)' : ''}`))) : h('p', { class: 'muted text-xs' }, 'No fog on this scene yet.'));
   const itemList = h('div', { class: 'rg-link-list' }, hiddenItems.length ? hiddenItems.map(([k, x]) => {
     const iid = keyTail(k);
     return h('label', { class: 'checkbox' }, h('input', { type: 'checkbox', checked: spawns.has(iid), onchange: (e) => p({ spawns: e.target.checked ? [...spawns, iid] : [...spawns].filter((s) => s !== iid) }, 'link item') }), h('span', null, x.name || 'Item'));

@@ -39,9 +39,15 @@ export function createPanel(app, { board }) {
   let phoneOpen = false;
   const isOpen = () => (phone ? phoneOpen : !!getSetting('panelOpen'));
 
+  // Rebuilt only when what it shows changed: it was redrawn on every change (each move a player makes), and redrawing
+  // its icons cost the DM's screen more than everything else a move does.
+  let railSig = '';
   function drawRail() {
-    clear(rail);
     const cur = active();
+    const sig = JSON.stringify([isOpen(), cur.id, visible().map((p) => [p.id, p.badge ? p.badge() || 0 : null])]);
+    if (sig === railSig) return;
+    railSig = sig;
+    clear(rail);
     let dmDivider = false;
     for (const p of visible()) {
       if (p.dm && !dmDivider) { add(rail, h('hr', { class: 'divider' })); dmDivider = true; }

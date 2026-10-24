@@ -122,10 +122,15 @@ export function mountRing(app, { sandbox = false } = {}) {
     refreshMenu(view, changes);
     show.update();
     if (world.dm && !previewing()) noteViewed(dmViewingId()); // the library's Recent list
+    if (world.dm) { A.normalizeFog(view.sceneId); A.normalizeFog(world.d('dmeta')?.live); } // older stacked fog: one layer
   }
   world.on((p) => { render(p); panel.refresh(p); });
   onUi((patch) => {
-    if ('tool' in patch || 'fogShape' in patch || 'fogMode' in patch) { board.setTool(ui.tool); drawTools(); }
+    if ('tool' in patch || 'fogShape' in patch) { if (ui.fogPicked.size && (ui.tool !== 'fog' || ui.fogShape !== 'select')) setUi({ fogPicked: new Set() }); }
+    // drawing tools work on the board: a token menu left open would cover where they draw
+    if ('tool' in patch && !['select', 'pan'].includes(ui.tool) && ui.selected.size) clearSelection();
+    if ('tool' in patch || 'fogShape' in patch || 'fogMode' in patch || 'fogPicked' in patch) { board.setTool(ui.tool); drawTools(); }
+    if ('viewing' in patch && ui.fogPicked.size) setUi({ fogPicked: new Set() });
     if ('selected' in patch) { render(); if (ui.selected.size) openMenu([...ui.selected][0]); else closeMenu(); } // several: the DM's group menu
     if ('placing' in patch || 'viewing' in patch || 'previewChar' in patch) { render(); panel.refresh({ table: new Set(['#']), dm: new Set() }); }
   });
@@ -338,7 +343,7 @@ export function mountRing(app, { sandbox = false } = {}) {
     clear(sub);
     const shapes = [
       ['lasso', 'Lasso', 'lasso'], ['poly', 'Polygon', 'polygon'], ['rect', 'Rectangle', 'square'],
-      ['toggle', 'Click to reveal / hide', 'eye'], ['erase', 'Erase an area', 'trash'],
+      ['toggle', 'Click to reveal / hide', 'eye'], ['select', 'Select (delete, reveal)', 'pointer'],
     ];
     const min = !!getSetting('fogPanelMin');
     const cur = shapes.find(([id]) => id === ui.fogShape) || shapes[0];
@@ -355,6 +360,16 @@ export function mountRing(app, { sandbox = false } = {}) {
         title: m === 'hide' ? 'Draw fog that hides what is under it' : 'Draw a clear hole inside fog', onclick: () => setUi({ fogMode: m }),
       }, l))));
     for (const [id, label, ic] of shapes) add(sub, h('button', { class: ['rg-sub-btn', ui.fogShape === id && 'is-active'], type: 'button', 'aria-pressed': String(ui.fogShape === id), onclick: () => setUi({ fogShape: id }) }, icon(ic), label));
+    if (ui.fogShape === 'select') {
+      const ids = [...ui.fogPicked].filter((id) => world.d(A.fogShapeKey(id)));
+      add(sub, h('div', { class: 'rg-sub-pick' }, ids.length
+        ? [h('span', { class: 'rg-sub-label' }, `${ids.length} fog area${ids.length === 1 ? '' : 's'} selected`),
+          h('div', { class: 'row' },
+            h('button', { class: 'btn btn-sm', type: 'button', onclick: () => A.setFogAreas(ids, false) }, icon('eye'), 'Reveal'),
+            h('button', { class: 'btn btn-sm', type: 'button', onclick: () => A.setFogAreas(ids, true) }, icon('eye-off'), 'Hide'),
+            h('button', { class: 'btn btn-sm btn-danger', type: 'button', title: 'Delete (Del)', onclick: () => deletePickedFog() }, icon('trash'), 'Delete'))]
+        : h('span', { class: 'rg-sub-label' }, 'Nothing selected')));
+    }
     const scene = view?.scene;
     add(sub, h('div', { class: 'rg-sub-row' }, h('span', { class: 'rg-sub-label' }, 'Players see'),
       segmented([{ value: 'black', label: 'Black fog' }, { value: 'white', label: 'White fog' }], scene?.fogColor === 'white' ? 'white' : 'black', (v) => A.setFogColor(v))));
@@ -364,8 +379,17 @@ export function mountRing(app, { sandbox = false } = {}) {
       h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.setFogOn(true) }, icon('eye-off'), 'Hide it all again'),
       h('button', { class: 'rg-sub-btn', type: 'button', onclick: () => A.clearFog() }, icon('trash'), 'Delete all fog'),
       h('p', { class: 'rg-sub-hint' }, ui.fogShape === 'poly' ? 'Click points; click the first one, double-click or press Enter to close. Click a fog area with Lasso or Rectangle to reveal it.'
-        : draws ? 'Drag to draw. Click a fog area to reveal it to the players, click again to hide it. Alt draws the other kind.'
-          : ui.fogShape === 'toggle' ? 'Click a fog area to reveal it to the players; click again to hide it.' : 'Click an area to delete it.'));
+        : draws ? 'Drag to draw. Fog is one layer: new fog replaces the fog under it, a clearing cuts it away. Click a fog area to reveal it, click again to hide it. Alt draws the other kind.'
+          : ui.fogShape === 'toggle' ? 'Click a fog area to reveal it to the players; click again to hide it.'
+            : 'Click a fog area to select it, Shift+click for more, or drag a box over several. Delete (or Del) removes them: no fog is left there.'));
+  }
+
+  function deletePickedFog() {
+    const ids = [...ui.fogPicked];
+    if (!ids.length) return;
+    A.deleteFog(ids);
+    setUi({ fogPicked: new Set() });
+    toast(`Deleted ${ids.length} fog area${ids.length === 1 ? '' : 's'}. Ctrl+Z brings ${ids.length === 1 ? 'it' : 'them'} back.`, { timeout: 2200 });
   }
 
   function zoomLabel() { const z = zoom?.querySelector('.rg-zoom-level'); if (z) z.textContent = `${Math.round(board.scale * 100)}%`; }
@@ -461,12 +485,14 @@ export function mountRing(app, { sandbox = false } = {}) {
     if (mod) return;
     if (k === 'escape') {
       if (libraryEscape()) return; // the library opened out over the board: its selection, then the library
+      if (ui.fogPicked.size) { setUi({ fogPicked: new Set() }); world.invalidate('view'); return; }
       if (ui.placing) setUi({ placing: null });
       else if (polyActive()) cancelPoly(board);
       else { clearSelection(); closeMenu(); }
       return;
     }
     if (k === 'enter' && polyActive()) { finishPoly(board); return; }
+    if ((k === 'delete' || k === 'backspace') && dm && ui.tool === 'fog' && ui.fogPicked.size) { e.preventDefault(); deletePickedFog(); return; }
     if ((k === 'delete' || k === 'backspace') && ui.selected.size) { e.preventDefault(); A.deleteKeys([...ui.selected]); return; }
     if (k === 'v') setUi({ tool: 'select' });
     else if (k === 'm') setUi({ tool: 'measure' });

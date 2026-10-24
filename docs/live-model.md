@@ -39,7 +39,7 @@ Table room (players read; `world.t`):
 |---|---|---|
 | `meta` | projector | `{live, blackout, unlocked: [charId], banner: {location?, time?}}` (only what the DM shows; `unlocked`: characters whose players may move their token on the live scene) |
 | `scene.<id>` | projector | the live scene: size, grid, light, map image reference, `fogOn` |
-| `fog.<scene>.<shape>` | projector | active fog shapes `{pts, mode: hide|reveal, z}` |
+| `fog.<scene>.<shape>` | projector | fog areas still hidden from players `{pts, holes, z, flat}` (one layer) |
 | `it.<item>` | projector | what players see of a creature / prop / triggered notice (name = alias, health or stats if shown) |
 | `ini.dm-<item>` | projector | visible creatures' initiative |
 | `turn`, `show` | projector | combat turn, the slideshow being presented |
@@ -50,7 +50,8 @@ Table room (players read; `world.t`):
 | `ini.pc-<char>`, `ini.x-<id>` | player / DM | PC initiative, DM extras (lair actions) |
 
 DM room (`world.d`): `dmeta` (live scene, banner with show flags, curtain, turn, presenting, `unlocked[scene][char]`),
-`scene.<id>` (all scenes; `fogColor` black / white), `fog.<scene>.<shape>` (with `on`), `item.<id>` (creatures, props, notes; with `hidden`, stats, HP),
+`scene.<id>` (all scenes; `fogColor` black / white), `fog.<scene>.<shape>` (`{pts, holes, on, z, flat: true}`: one
+layer, see below), `item.<id>` (creatures, props, notes; with `hidden`, stats, HP),
 `cre.<id>` (custom creatures), `cprop.<id>` (custom props), `media.<id>` (image registry), `deck.<id>` (slideshows),
 and the map library (`ring/library.js`): `folder.<id>` (`{name, parent, order, color}`; folders nest to any depth,
 unknown or cyclic parents count as top level), `recent` (`{ids}`, the last 12 scenes the DM stayed on), and on each
@@ -61,7 +62,11 @@ it, and the projector doesn't re-project for `folder.*` / `recent` changes.
 ## The projection (`ring/model.js` `project`, `ring/projector.js`)
 
 The DM's client turns the DM room into the table room's projected keys after every change (a lone moved item takes a
-fast path). Players get only: the live scene (none behind the curtain), active fog, items that are not hidden and not
+fast path). Fog is one layer (`model.js` `cutFog`): a new area or a clearing is cut out of the areas it overlaps
+(stored as `holes`; an area wholly covered goes), so areas never overlap; older saves' stacked shapes
+(`{pts, mode, z}`, newest winning) are flattened (`flattenFog`) when the DM opens the scene, and before projecting.
+An area cut very many times has its holes simplified to stay well under the brokers' size limit. Players get only:
+the live scene (none behind the curtain), active fog, items that are not hidden and not
 under fog, a creature's alias and only the stats the DM shows, triggered notices, visible creatures' initiative, the
 banner parts marked "Show", and the slideshow being presented. Everything else stays sealed in the DM room.
 A slide's `title` / `caption` and the deck title are left out when the DM unticks "Players see" (`hideTitle`,

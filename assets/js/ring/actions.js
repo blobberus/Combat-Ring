@@ -3,7 +3,7 @@
 // and preferences.
 import { world, me, undoGroup } from './world.js';
 import { ui, parseKey, viewKey, clearSelection } from './state.js';
-import { K, newId, keyTail, snapPoint, sizeCells, rectPts, sceneSize, sortInitiative, nextTurn, rollFormula, abilityMod, fmtMod, SIZE_CELLS } from './model.js';
+import { K, newId, keyTail, snapPoint, sizeCells, rectPts, sceneSize, sortInitiative, nextTurn, rollFormula, abilityMod, fmtMod, SIZE_CELLS, cutFog, flattenFog } from './model.js';
 import { getSetting } from '../core/settings.js';
 import { toast } from '../core/ui.js';
 import { dmViewingId, liveSceneId } from './view.js';
@@ -246,11 +246,38 @@ export function restack(vks, front = true) {
 
 // ---------- fog ----------
 
+const fogAreas = (sceneId) => world.dList(`fog.${sceneId}.`).filter(([, v]) => v).map(([k, v]) => ({ ...v, id: k.slice(`fog.${sceneId}.`.length) }));
+const stripId = ({ id, ...v }) => v;
+
+/** Older saves stacked fog shapes; turn a scene's into one layer (once; not an undo step). */
+const fogChecked = new Map(); // scene -> DM room version last checked (players' moves don't make it look again)
+export function normalizeFog(sceneId) {
+  if (!sceneId || !world.dm || fogChecked.get(sceneId) === world.version.dm) return;
+  fogChecked.set(sceneId, world.version.dm);
+  const areas = fogAreas(sceneId);
+  if (areas.every((a) => a.flat)) return;
+  const flat = new Map(flattenFog(areas).map((a) => [a.id, a]));
+  for (const a of areas) {
+    const next = flat.get(a.id);
+    if (next) world.dPut(K.fog(sceneId, a.id), stripId(next)); else world.del('dm', K.fog(sceneId, a.id));
+  }
+}
+
+/**
+ * Draw fog (mode 'hide') or a clearing ('reveal'). Fog is one layer: the new area cuts itself out of the areas it
+ * overlaps (a whole area under it goes); a clearing only cuts. Returns the new area's id.
+ */
 export function addFog(pts, mode = ui.fogMode) {
   const sceneId = dmViewingId();
   if (!sceneId || !pts || pts.length < 6) return null;
-  const id = newId('f');
-  world.dPut(K.fog(sceneId, id), { pts, mode, on: true, z: Date.now() }, dmUndo);
+  normalizeFog(sceneId);
+  const id = mode === 'reveal' ? null : newId('f');
+  undoGroup(id ? 'fog' : 'clearing', () => {
+    for (const [fid, next] of cutFog(fogAreas(sceneId), pts)) {
+      if (next) world.dPut(K.fog(sceneId, fid), stripId(next), dmUndo); else world.del('dm', K.fog(sceneId, fid), dmUndo);
+    }
+    if (id) world.dPut(K.fog(sceneId, id), { pts, holes: [], on: true, z: Date.now(), flat: true }, dmUndo);
+  });
   return id;
 }
 
@@ -263,10 +290,23 @@ export function toggleFog(id) {
   if (!f) return;
   const on = f.on === false;
   world.dPut(key, { ...f, on }, { undo: true, label: on ? 'hide fog area' : 'reveal fog area' });
-  if (f.mode !== 'reveal') toast(on ? 'Fog back: the players can’t see this area.' : 'Revealed to the players.', { timeout: 1600 });
+  toast(on ? 'Fog back: the players can’t see this area.' : 'Revealed to the players.', { timeout: 1600 });
 }
 
-export function deleteFog(id) { world.del('dm', fogShapeKey(id), dmUndo); }
+/** Delete fog areas (no fog is left there). */
+export function deleteFog(ids) {
+  undoGroup('delete fog', () => { for (const id of [].concat(ids)) world.del('dm', fogShapeKey(id), dmUndo); });
+}
+
+/** Reveal (on: false) or hide again several fog areas. */
+export function setFogAreas(ids, on) {
+  undoGroup(on ? 'hide fog' : 'reveal fog', () => {
+    for (const id of ids) {
+      const f = world.d(fogShapeKey(id));
+      if (f && (f.on !== false) !== on) world.dPut(fogShapeKey(id), { ...f, on }, dmUndo);
+    }
+  });
+}
 
 /** Black or white fog, per scene. */
 export function setFogColor(color) {

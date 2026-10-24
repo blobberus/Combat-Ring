@@ -5,7 +5,7 @@
 import { h, clear, add, mount } from '../core/dom.js';
 import { icon } from '../core/ui.js';
 import { getSetting } from '../core/settings.js';
-import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp, sortShapes, fogged } from './model.js';
+import { cellPx, ftToPx, pathD, sizeCells, distanceFt, clamp, fogged } from './model.js';
 import { mediaUrl, cachedUrl, mediaKey, isUrl } from './media.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -98,8 +98,8 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
 
   /** Players: the box around what isn't under fog (sampled), plus their own tokens; null when nothing is fogged. */
   function seenBox(v) {
-    const shapes = v.scene?.fogOn === false ? [] : sortShapes((v.fog || []).filter((s) => s.on !== false && s.pts?.length >= 6));
-    if (!shapes.some((s) => s.mode !== 'reveal')) return null;
+    const shapes = v.scene?.fogOn === false ? [] : (v.fog || []).filter((s) => s.on !== false);
+    if (!shapes.length) return null;
     const n = 48, sx = st.w / n, sy = st.h / n;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const take = (x, y, rx, ry) => { x0 = Math.min(x0, x - rx); y0 = Math.min(y0, y - ry); x1 = Math.max(x1, x + rx); y1 = Math.max(y1, y + ry); };
@@ -279,10 +279,12 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
   }
 
   // The DM edits crisp, see-through fog with outlines (SVG); players get opaque fog with soft, misty edges (canvas).
+  // Fog is one layer (model.js): each area is its outline minus its holes (the areas drawn over it later).
   function renderFog(v) {
     const shapes = v.fog || [];
     const color = v.scene.fogColor === 'white' ? 'white' : 'black';
-    const sig = `${v.role}|${v.scene.fogOn}|${color}|${st.w}|${st.h}|${cellPx(v.scene)}|${v.fogSel || ''}|${v.fogErase ? 'e' : ''}|${shapes.map((s) => `${s.id}:${s.z}:${s.on !== false}:${s.mode}:${s.pts.length}:${s.pts[0]},${s.pts[1]}`).join(';')}`;
+    const picked = new Set(v.fogPicked || []);
+    const sig = `${v.role}|${v.scene.fogOn}|${color}|${st.w}|${st.h}|${cellPx(v.scene)}|${v.fogSel || ''}|${[...picked].join(',')}|${shapes.map((s) => `${s.id}:${s.z}:${s.on !== false}:${s.pts.length}:${s.pts[0]},${s.pts[1]}:${s.holes?.length || 0}`).join(';')}`;
     if (sig === fogSig) return;
     fogSig = sig;
     clear(fogSvg);
@@ -291,35 +293,44 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
     fogCanvas.hidden = !soft;
     if (soft) { softFog(v, shapes, color); return; }
     if (v.scene.fogOn === false || !shapes.length) return;
-    const id = `fogmask-${Math.random().toString(36).slice(2, 7)}`;
-    const mask = svgEl('mask', { id, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: st.w, height: st.h });
+    const uid = Math.random().toString(36).slice(2, 7);
+    const defs = svgEl('defs');
+    // the fog players get: areas oldest first, each painting its outline and clearing its holes (a revealed area
+    // paints nothing, so what lies under it stays clear)
+    const mask = svgEl('mask', { id: `fogmask-${uid}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: st.w, height: st.h });
     add(mask, svgEl('rect', { x: 0, y: 0, width: st.w, height: st.h, fill: 'black' }));
     for (const s of shapes) {
       if (s.on === false) continue;
-      add(mask, svgEl('path', { d: pathD(s.pts), fill: s.mode === 'reveal' ? 'black' : 'white' }));
+      add(mask, svgEl('path', { d: pathD(s.pts), fill: 'white' }));
+      for (const hole of s.holes || []) add(mask, svgEl('path', { d: pathD(hole), fill: 'black' }));
     }
-    const defs = svgEl('defs');
     add(defs, mask);
-    add(fogSvg, defs, svgEl('rect', { x: 0, y: 0, width: st.w, height: st.h, class: 'rg-fog-fill', mask: `url(#${id})` }));
-    if (v.role === 'dm') {
-      for (const s of shapes) {
-        add(fogSvg, svgEl('path', {
-          d: pathD(s.pts), 'data-fog': s.id,
-          class: ['rg-fog-edge', s.mode === 'reveal' ? 'is-reveal' : 'is-hide', s.on === false && 'is-off', v.fogSel === s.id && 'is-sel', v.fogSel === s.id && v.fogErase && 'is-erase'].filter(Boolean).join(' '),
-          'vector-effect': 'non-scaling-stroke',
-        }));
+    add(fogSvg, defs, svgEl('rect', { x: 0, y: 0, width: st.w, height: st.h, class: 'rg-fog-fill', mask: `url(#fogmask-${uid})` }));
+    // outlines: each area's own (the parts under a later area are masked off), so the DM sees one layer of areas
+    shapes.forEach((s, i) => {
+      let m = null;
+      if (s.holes?.length) {
+        m = svgEl('mask', { id: `fe-${uid}-${i}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: st.w, height: st.h });
+        add(m, svgEl('rect', { x: 0, y: 0, width: st.w, height: st.h, fill: 'white' }));
+        for (const hole of s.holes) add(m, svgEl('path', { d: pathD(hole), fill: 'black' }));
+        add(defs, m);
       }
-    }
+      add(fogSvg, svgEl('path', {
+        d: [pathD(s.pts), ...(s.holes || []).map(pathD)].join(''), 'data-fog': s.id, 'fill-rule': 'evenodd', mask: m ? `url(#fe-${uid}-${i})` : null,
+        class: ['rg-fog-edge', 'is-hide', s.on === false && 'is-off', v.fogSel === s.id && 'is-sel', picked.has(s.id) && 'is-picked'].filter(Boolean).join(' '),
+        'vector-effect': 'non-scaling-stroke',
+      }));
+    });
   }
 
-  // Fog for players, drawn at a modest resolution (it is soft anyway) and scaled with the board. Fog shapes grow by
-  // `r` and clearings shrink by `r` before the blur, so the blur never uncovers what the DM drew as hidden; the
-  // canvas reaches past the map edges so they stay covered too.
+  // Fog for players, drawn at a modest resolution (it is soft anyway) and scaled with the board. Areas grow by `r` and
+  // their holes shrink by `r` before the blur, so the blur never uncovers what the DM drew as hidden; the canvas
+  // reaches past the map edges so they stay covered too. Areas don't overlap: oldest first, each clears its holes.
   const MIST = { black: '#14110d', white: '#e8e4da' };
   let grain = null;
   function softFog(v, shapes, color) {
-    const on = v.scene.fogOn !== false ? sortShapes(shapes.filter((s) => s.on !== false && s.pts?.length >= 6)) : [];
-    if (!on.some((s) => s.mode !== 'reveal')) { fogCanvas.width = 1; fogCanvas.height = 1; fogCanvas.hidden = true; return; }
+    const on = v.scene.fogOn !== false ? shapes.filter((s) => s.on !== false) : [];
+    if (!on.length) { fogCanvas.width = 1; fogCanvas.height = 1; fogCanvas.hidden = true; return; }
     const r = cellPx(v.scene) * 0.16;
     const m = Math.ceil(r * 3); // margin past the map edges (map units)
     const W = st.w + m * 2, H = st.h + m * 2;
@@ -335,16 +346,16 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
     for (const c of [g, t]) { c.setTransform(k, 0, 0, k, m * k, m * k); c.lineJoin = 'round'; c.lineWidth = r * 2; }
     const fill = MIST[color];
     for (const s of on) {
-      if (s.mode === 'reveal') {
-        // the clearing, shrunk by r, cut out of what is below it
-        t.setTransform(1, 0, 0, 1, 0, 0); t.clearRect(0, 0, cw, ch); t.setTransform(k, 0, 0, k, m * k, m * k);
-        t.globalCompositeOperation = 'source-over'; t.fillStyle = '#000'; path(t, s.pts); t.fill();
-        t.globalCompositeOperation = 'destination-out'; t.strokeStyle = '#000'; path(t, s.pts); t.stroke();
-        g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-out'; g.drawImage(tmp, 0, 0); g.restore();
-      } else {
-        g.globalCompositeOperation = 'source-over'; g.fillStyle = fill; g.strokeStyle = fill;
-        path(g, s.pts); g.fill(); g.stroke();
-      }
+      g.globalCompositeOperation = 'source-over'; g.fillStyle = fill; g.strokeStyle = fill;
+      path(g, s.pts); g.fill(); g.stroke();
+      if (!s.holes?.length) continue;
+      // its holes, shrunk by r, cut out again (one pass for all of them)
+      t.setTransform(1, 0, 0, 1, 0, 0); t.clearRect(0, 0, cw, ch); t.setTransform(k, 0, 0, k, m * k, m * k);
+      t.globalCompositeOperation = 'source-over'; t.fillStyle = '#000';
+      for (const hole of s.holes) { path(t, hole); t.fill(); }
+      t.globalCompositeOperation = 'destination-out'; t.strokeStyle = '#000';
+      for (const hole of s.holes) { path(t, hole); t.stroke(); }
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-out'; g.drawImage(tmp, 0, 0); g.restore();
     }
     fogCanvas.width = cw; fogCanvas.height = ch;
     Object.assign(fogCanvas.style, { left: `${-m}px`, top: `${-m}px`, width: `${W}px`, height: `${H}px` });
@@ -369,7 +380,7 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
     for (let i = 0; i < 36; i++) { // broad, faint clouds (tiling seamlessly)
       const x = rnd() * N, y = rnd() * N, rad = 80 + rnd() * 120;
       const gr = g.createRadialGradient(x, y, 0, x, y, rad);
-      gr.addColorStop(0, rnd() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)');
+      gr.addColorStop(0, rnd() > 0.5 ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.04)'); // faint: mist, nothing that reads as ground
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = gr;
       for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) { g.save(); g.translate(dx, dy); g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill(); g.restore(); }
@@ -532,7 +543,8 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
     clear(desatSvg);
     if (!lit || level === 'bright') { darkSvg.style.display = 'none'; desat.style.display = 'none'; return; }
     darkSvg.style.display = '';
-    const alpha = (level === 'dark' ? 0.97 : 0.5) * (v.role === 'dm' ? 0.45 : 1);
+    // players: a dark scene is pitch black outside light and darkvision (view.js doesn't draw what is there either)
+    const alpha = v.role === 'dm' ? (level === 'dark' ? 0.44 : 0.22) : level === 'dark' ? 1 : 0.5;
     const uid = Math.random().toString(36).slice(2, 7);
     const defs = svgEl('defs');
     const mask = svgEl('mask', { id: `dk-${uid}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: st.w, height: st.h });
@@ -547,8 +559,8 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
       return `url(#${id})`;
     };
     lit.forEach((src, i) => {
-      // light sources: bright radius fully lit, dim radius half; darkvision: seen dimly (in gray) to its edge
-      if (src.bright || src.dim) {
+      // light sources: bright radius fully lit, dim radius half; a viewer's darkvision: seen dimly (in gray) to its edge
+      if (!src.sight && (src.bright || src.dim)) {
         const r = ftToPx((src.bright || 0) + (src.dim || 0), v.scene);
         const inner = r ? ftToPx(src.bright || 0, v.scene) / r : 0;
         add(mask, svgEl('circle', { cx: src.x, cy: src.y, r, fill: grad(`l${i}-${uid}`, [[0, 'black', 1], [Math.max(0, inner - 0.02), 'black', 1], [Math.min(1, inner + 0.08), 'black', 0.55], [1, 'black', 0]]) }));
@@ -556,7 +568,7 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
       if (src.darkvision > 0) {
         const r = ftToPx(src.darkvision, v.scene);
         const soft = clamp((src.soft ?? 45) / 100, 0.02, 1);
-        const keep = level === 'dark' ? 1 - clamp((src.dim ?? 25) / 100, 0, 0.9) : 1;
+        const keep = level === 'dark' ? 1 - clamp((src.fade ?? 25) / 100, 0, 0.9) : 1;
         add(mask, svgEl('circle', { cx: src.x, cy: src.y, r, fill: grad(`d${i}-${uid}`, [[0, 'black', keep], [1 - soft, 'black', keep], [1, 'black', 0]]) }));
         if (level === 'dark' && (src.gray ?? 85) > 0) {
           anyDesat = true;
@@ -566,7 +578,7 @@ export function createBoard(root, { onTool, onHover, onViewChange, insets } = {}
           add(darkSvg, svgEl('circle', { cx: src.x, cy: src.y, r, fill: grad(`t${i}-${uid}`, [[0, src.tint, src.tintStrength / 100], [1 - soft, src.tint, src.tintStrength / 100], [1, src.tint, 0]]) }));
         }
       }
-      if (!src.darkvision && !src.bright && !src.dim && src.self) {
+      if (src.sight && !src.darkvision) {
         // everyone sees their own token, even blind in the dark
         add(mask, svgEl('circle', { cx: src.x, cy: src.y, r: cellPx(v.scene) * 0.7, fill: grad(`s${i}-${uid}`, [[0, 'black', 0.9], [0.6, 'black', 0.6], [1, 'black', 0]]) }));
       }

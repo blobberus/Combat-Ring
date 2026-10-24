@@ -3,11 +3,12 @@ const listeners = new Set();
 
 export const ui = {
   tool: 'select', // select | pan | measure | pin | fog | note
-  fogShape: 'lasso', // lasso | poly | rect | erase | toggle
+  fogShape: 'lasso', // lasso | poly | rect | toggle (click to reveal / hide) | select (pick areas to delete, reveal, hide)
   fogMode: 'hide', // hide | reveal
   viewing: null, // DM: the scene on the board (null = the live one)
   selected: new Set(), // view keys: 'd:item.<id>', 't:it.<id>', 't:pct.<scene>.<char>', 't:pin.<id>'
-  fogSel: null, // DM: fog shape id under the cursor (erase / toggle)
+  fogSel: null, // DM: the fog area under the cursor (what a click would act on)
+  fogPicked: new Set(), // DM: fog areas picked with the Select fog tool
   placing: null, // {kind: 'creature'|'prop'|'pc'|'note', …, name, w, h, img}
   previewChar: null, // DM preview: whose eyes (null = the whole party)
   optimistic: new Map(), // key -> {x, y, at}: our own moves of things the DM's client re-publishes
